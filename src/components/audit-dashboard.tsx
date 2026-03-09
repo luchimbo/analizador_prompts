@@ -35,6 +35,10 @@ export function AuditDashboard() {
   const [streamedResults, setStreamedResults] = useState<PromptAuditResult[]>([]);
 
   const hasPendingWork = loadingAction !== null || Boolean(savingPromptId);
+  const hasReadyPromptBank =
+    selectedProduct?.promptBank?.prompts.length === 50 &&
+    selectedProduct.promptBank.language === LOCKED_LANGUAGE &&
+    selectedProduct.promptBank.market === LOCKED_MARKET;
   const showingLiveResults = loadingAction === "run" || streamedResults.length > 0;
   const visibleResults = showingLiveResults ? streamedResults : activeRun?.results ?? [];
 
@@ -194,7 +198,7 @@ export function AuditDashboard() {
   }
 
   async function handleRunAudit() {
-    if (!selectedProductId) {
+    if (!selectedProductId || !hasReadyPromptBank) {
       return;
     }
 
@@ -530,7 +534,7 @@ export function AuditDashboard() {
                   </div>
 
                   <div className="actions">
-                    <button className="primary" onClick={handleRunAudit} disabled={hasPendingWork || !selectedProduct}>
+                    <button className="primary" onClick={handleRunAudit} disabled={hasPendingWork || !selectedProduct || !hasReadyPromptBank}>
                       {loadingAction === "run" ? "Ejecutando los 50 prompts..." : "Responder 50 prompts"}
                     </button>
                     {activeRun ? (
@@ -539,6 +543,12 @@ export function AuditDashboard() {
                       </a>
                     ) : null}
                   </div>
+
+                  {!hasReadyPromptBank ? (
+                    <p className="empty-state">
+                      Antes de generar las 50 respuestas, primero tenes que generar y guardar los 50 prompts de este producto.
+                    </p>
+                  ) : null}
 
                   {runProgress ? (
                     <div className="progress-card" aria-live="polite">

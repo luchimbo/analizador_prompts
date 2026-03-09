@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 
-import { getProduct, runProductAuditWithProgress } from "@/lib/orchestrator";
+import { ensureReadyPromptBank, getProduct, runProductAuditWithProgress } from "@/lib/orchestrator";
 import type { ProductRunRequest, RunProgressEvent } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -14,6 +14,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pr
     if (!product) {
       return Response.json({ error: "Product not found" }, { status: 404 });
     }
+    const promptBank = ensureReadyPromptBank(product);
 
     const encoder = new TextEncoder();
 
@@ -27,7 +28,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pr
           push({
             type: "started",
             current: 0,
-            total: product.promptBank?.prompts.length ?? 50,
+            total: promptBank.prompts.length,
             message: "Run started",
           });
 

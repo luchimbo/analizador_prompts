@@ -119,6 +119,7 @@ export async function finalizeRunRecord({
 }
 
 export async function getRun(runId: string): Promise<AuditRunResponse | null> {
+  await repairStaleRunningRuns();
   const db = await getDb();
   const runResult = await db.execute({ sql: `SELECT * FROM runs WHERE run_id = ? LIMIT 1`, args: [runId] });
   const runRow = runResult.rows[0];
@@ -131,6 +132,7 @@ export async function getRun(runId: string): Promise<AuditRunResponse | null> {
 }
 
 export async function listRuns(limit = 20): Promise<RunListItem[]> {
+  await repairStaleRunningRuns();
   const db = await getDb();
   const result = await db.execute({
     sql: `SELECT run_id, product_id, status, created_at, audited_provider, audited_model, product_name, export_path FROM runs ORDER BY created_at DESC LIMIT ?`,
@@ -140,6 +142,7 @@ export async function listRuns(limit = 20): Promise<RunListItem[]> {
 }
 
 export async function listRunsByProduct(productId: string, limit = 20): Promise<RunListItem[]> {
+  await repairStaleRunningRuns();
   const db = await getDb();
   const result = await db.execute({
     sql: `SELECT run_id, product_id, status, created_at, audited_provider, audited_model, product_name, export_path FROM runs WHERE product_id = ? ORDER BY created_at DESC LIMIT ?`,
@@ -149,6 +152,7 @@ export async function listRunsByProduct(productId: string, limit = 20): Promise<
 }
 
 export async function countRunsByProduct(productId: string): Promise<number> {
+  await repairStaleRunningRuns();
   const db = await getDb();
   const result = await db.execute({ sql: `SELECT COUNT(*) AS total FROM runs WHERE product_id = ?`, args: [productId] });
   return Number(result.rows[0]?.total ?? 0);
@@ -168,6 +172,68 @@ function mapRunRow(runRow: Record<string, unknown>, resultRows: Array<Record<str
     summary: parseJson<RunSummary | null>(runRow.summary_json, null),
     exportPath: asNullableString(runRow.export_path),
     errorMessage: asNullableString(runRow.error_message),
+  };
+}
+
+async function repairStaleRunningRuns(): Promise<void> {
+  const db = await getDb();
+  const result = await db.execute(`SELECT run_id, created_at, prompt_bank_json FROM runs WHERE status = 'running'`);
+  const cutoff = Date.now() - 10 * 60 * 1000;
+
+  for (const row of result.rows) {
+    const createdAt = Date.parse(asString(row.created_at));
+    if (!Number.isFinite(createdAt) || createdAt > cutoff) {
+      continue;
+    }
+
+    const runId = asString(row.run_id);
+    const promptBank = parseJson<PromptBank | null>(row.prompt_bank_json, null);
+    const expectedTotal = promptBank?.prompts.length ?? 50;
+    const partialRun = await getRunWithoutRepair(runId);
+    if (!partialRun) {
+      continue;
+    }
+
+    const summary = partialRun.results.length ? buildSummaryFromResults(partialRun.results) : null;
+    const nextStatus: RunStatus = partialRun.results.length >= expectedTotal ? "completed" : "failed";
+    const errorMessage =
+      nextStatus === "failed" ? `Run interrupted before finishing all prompts (${partialRun.results.length}/${expectedTotal}).` : partialRun.errorMessage ?? null;
+
+    await finalizeRunRecord({
+      runId,
+      status: nextStatus,
+      summary,
+      errorMessage,
+    });
+  }
+}
+
+async function getRunWithoutRepair(runId: string): Promise<AuditRunResponse | null> {
+  const db = await getDb();
+  const runResult = await db.execute({ sql: `SELECT * FROM runs WHERE run_id = ? LIMIT 1`, args: [runId] });
+  const runRow = runResult.rows[0];
+  if (!runRow) {
+    return null;
+  }
+  const resultsResult = await db.execute({ sql: `SELECT * FROM run_results WHERE run_id = ? ORDER BY prompt_order ASC`, args: [runId] });
+  return mapRunRow(runRow, resultsResult.rows);
+}
+
+function buildSummaryFromResults(results: PromptAuditResult[]): RunSummary {
+  const total = results.length;
+  const productHits = results.reduce((acc, result) => acc + result.productHit, 0);
+  const vendorHits = results.reduce((acc, result) => acc + result.vendorHit, 0);
+  const exactHits = results.reduce((acc, result) => acc + result.exactUrlAccuracy, 0);
+  const competitorTotal = results.reduce((acc, result) => acc + result.productCompetitors, 0);
+  const ranks = results.map((result) => result.rank).filter((rank) => rank > 0);
+
+  return {
+    totalPrompts: total,
+    productHitRate: total ? round(productHits / total) : 0,
+    vendorHitRate: total ? round(vendorHits / total) : 0,
+    exactUrlAccuracyRate: total ? round(exactHits / total) : 0,
+    averageCompetitors: total ? round(competitorTotal / total) : 0,
+    averageRankWhenPresent: ranks.length ? round(ranks.reduce((acc, rank) => acc + rank, 0) / ranks.length) : 0,
   };
 }
 
@@ -230,4 +296,8 @@ function asNullableString(value: unknown): string | null {
     return null;
   }
   return String(value);
+}
+
+function round(value: number): number {
+  return Math.round(value * 10000) / 10000;
 }

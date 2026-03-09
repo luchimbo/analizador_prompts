@@ -99,6 +99,22 @@ export async function updateSavedProductPrompt(productId: string, promptId: stri
   return updateProductPrompt(productId, promptId, prompt);
 }
 
+export function ensureReadyPromptBank(product: SavedProduct): PromptBank {
+  if (!product.promptBank) {
+    throw new Error("Primero genera los 50 prompts del producto antes de correr la auditoria.");
+  }
+
+  if (product.promptBank.prompts.length !== 50) {
+    throw new Error("El banco de prompts no esta completo. Regenera los 50 prompts antes de correr la auditoria.");
+  }
+
+  if (product.promptBank.language !== LOCKED_LANGUAGE || product.promptBank.market !== LOCKED_MARKET) {
+    throw new Error("Los prompts guardados no corresponden al mercado argentino actual. Regeneralos antes de correr la auditoria.");
+  }
+
+  return product.promptBank;
+}
+
 export async function runProductAudit(productId: string, request: ProductRunRequest): Promise<AuditRunResponse> {
   const product = await getProductRecord(productId);
   if (!product) {
@@ -109,11 +125,7 @@ export async function runProductAudit(productId: string, request: ProductRunRequ
   const market = LOCKED_MARKET;
   const auditedProvider = request.auditedProvider ?? "openai";
   const auditedModel = request.auditedModel ?? defaultAuditedModel(auditedProvider);
-  const shouldRefreshPromptBank = !product.promptBank || product.promptBank.language !== language || product.promptBank.market !== market;
-  const promptBank = shouldRefreshPromptBank ? await generatePromptBank(product.profile, language, market) : product.promptBank!;
-  if (shouldRefreshPromptBank) {
-    await updateProductPromptBank(productId, promptBank);
-  }
+  const promptBank = ensureReadyPromptBank(product);
 
   const run = await executeAuditFlow({
     productId,
@@ -152,11 +164,7 @@ export async function runProductAuditWithProgress(
   const market = LOCKED_MARKET;
   const auditedProvider = request.auditedProvider ?? "openai";
   const auditedModel = request.auditedModel ?? defaultAuditedModel(auditedProvider);
-  const shouldRefreshPromptBank = !product.promptBank || product.promptBank.language !== language || product.promptBank.market !== market;
-  const promptBank = shouldRefreshPromptBank ? await generatePromptBank(product.profile, language, market) : product.promptBank!;
-  if (shouldRefreshPromptBank) {
-    await updateProductPromptBank(productId, promptBank);
-  }
+  const promptBank = ensureReadyPromptBank(product);
 
   const run = await executeAuditFlow({
     productId,
@@ -228,30 +236,64 @@ async function executeAuditFlow({
   });
 
   try {
-    for (const [index, prompt] of promptBank.prompts.entries()) {
-      const execution = await executeAuditPrompt({
-        prompt,
-        auditedProvider,
-        auditedModel,
-        language,
-        market,
-        enableWebSearch,
-      });
-      const judged = await judgeExecution({ profile, execution, verifyDetectedUrls });
-      const result: PromptAuditResult = { ...execution, ...judged };
-      results.push(result);
-      await appendRunResult(runId, index + 1, result);
-      if (onProgress) {
-        await onProgress({
-          current: index + 1,
-          total,
-          promptId: prompt.id,
-          promptType: prompt.type,
-          promptText: prompt.prompt,
-          result,
-        });
+    const orderedResults = new Array<PromptAuditResult>(total);
+    const concurrency = Math.max(1, Math.min(env.runConcurrency || 1, total));
+    let nextIndex = 0;
+    let completed = 0;
+    let workerError: Error | null = null;
+
+    const worker = async () => {
+      while (true) {
+        if (workerError) {
+          return;
+        }
+
+        const currentIndex = nextIndex;
+        nextIndex += 1;
+        if (currentIndex >= total) {
+          return;
+        }
+
+        const prompt = promptBank.prompts[currentIndex];
+
+        try {
+          const execution = await executeAuditPrompt({
+            prompt,
+            auditedProvider,
+            auditedModel,
+            language,
+            market,
+            enableWebSearch,
+          });
+          const judged = await judgeExecution({ profile, execution, verifyDetectedUrls });
+          const result: PromptAuditResult = { ...execution, ...judged };
+          orderedResults[currentIndex] = result;
+          await appendRunResult(runId, currentIndex + 1, result);
+          completed += 1;
+          if (onProgress) {
+            await onProgress({
+              current: completed,
+              total,
+              promptId: prompt.id,
+              promptType: prompt.type,
+              promptText: prompt.prompt,
+              result,
+            });
+          }
+        } catch (error) {
+          workerError = error instanceof Error ? error : new Error("Unknown error");
+          return;
+        }
       }
+    };
+
+    await Promise.all(Array.from({ length: concurrency }, () => worker()));
+
+    if (workerError) {
+      throw workerError;
     }
+
+    results.push(...orderedResults.filter((result): result is PromptAuditResult => Boolean(result)));
 
     const summary = buildSummary(results);
     await finalizeRunRecord({ runId, status: "completed", summary });
