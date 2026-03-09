@@ -24,36 +24,39 @@ import type {
   RunSummary,
 } from "@/lib/types";
 
+const LOCKED_LANGUAGE = "es";
+const LOCKED_MARKET = "Argentina";
+
 export async function profileProduct(request: ProfileRequest): Promise<ProductProfile> {
   return buildProductProfile(request.productUrl, request.overrides ?? {});
 }
 
 export async function previewPromptBank(request: PromptBankRequest): Promise<PromptBank> {
   const profile = await buildProductProfile(request.productUrl, request.overrides ?? {});
-  return generatePromptBank(profile, request.language ?? env.defaultLanguage, request.market ?? env.defaultMarket);
+  return generatePromptBank(profile, LOCKED_LANGUAGE, LOCKED_MARKET);
 }
 
 export async function runAudit(request: AuditRunRequest): Promise<AuditRunResponse> {
   const auditedProvider = request.auditedProvider ?? "openai";
   const auditedModel = request.auditedModel ?? defaultAuditedModel(auditedProvider);
   const profile = await buildProductProfile(request.productUrl, request.overrides ?? {});
-  const promptBank = await generatePromptBank(profile, request.language ?? env.defaultLanguage, request.market ?? env.defaultMarket);
+  const promptBank = await generatePromptBank(profile, LOCKED_LANGUAGE, LOCKED_MARKET);
   return executeAuditFlow({
     productId: null,
     auditedProvider,
     auditedModel,
     profile,
     promptBank,
-    language: request.language ?? env.defaultLanguage,
-    market: request.market ?? env.defaultMarket,
+    language: LOCKED_LANGUAGE,
+    market: LOCKED_MARKET,
     enableWebSearch: request.enableWebSearch ?? true,
     verifyDetectedUrls: request.verifyDetectedUrls ?? env.verifyDetectedUrls,
   });
 }
 
 export async function createProduct(request: CreateProductRequest): Promise<SavedProduct> {
-  const language = request.language ?? env.defaultLanguage;
-  const market = request.market ?? env.defaultMarket;
+  const language = LOCKED_LANGUAGE;
+  const market = LOCKED_MARKET;
   const profile = await buildProductProfile(request.productUrl, request.overrides ?? {});
   return upsertProductRecord({ profile, language, market });
 }
@@ -88,7 +91,7 @@ export async function generateProductPrompts(productId: string): Promise<SavedPr
     throw new Error("Product not found");
   }
 
-  const promptBank = await generatePromptBank(product.profile, product.language, product.market);
+  const promptBank = await generatePromptBank(product.profile, LOCKED_LANGUAGE, LOCKED_MARKET);
   return updateProductPromptBank(productId, promptBank);
 }
 
@@ -102,12 +105,13 @@ export async function runProductAudit(productId: string, request: ProductRunRequ
     throw new Error("Product not found");
   }
 
-  const language = request.language ?? product.language ?? env.defaultLanguage;
-  const market = request.market ?? product.market ?? env.defaultMarket;
+  const language = LOCKED_LANGUAGE;
+  const market = LOCKED_MARKET;
   const auditedProvider = request.auditedProvider ?? "openai";
   const auditedModel = request.auditedModel ?? defaultAuditedModel(auditedProvider);
-  const promptBank = product.promptBank ?? (await generatePromptBank(product.profile, language, market));
-  if (!product.promptBank) {
+  const shouldRefreshPromptBank = !product.promptBank || product.promptBank.language !== language || product.promptBank.market !== market;
+  const promptBank = shouldRefreshPromptBank ? await generatePromptBank(product.profile, language, market) : product.promptBank!;
+  if (shouldRefreshPromptBank) {
     await updateProductPromptBank(productId, promptBank);
   }
 
@@ -144,12 +148,13 @@ export async function runProductAuditWithProgress(
     throw new Error("Product not found");
   }
 
-  const language = request.language ?? product.language ?? env.defaultLanguage;
-  const market = request.market ?? product.market ?? env.defaultMarket;
+  const language = LOCKED_LANGUAGE;
+  const market = LOCKED_MARKET;
   const auditedProvider = request.auditedProvider ?? "openai";
   const auditedModel = request.auditedModel ?? defaultAuditedModel(auditedProvider);
-  const promptBank = product.promptBank ?? (await generatePromptBank(product.profile, language, market));
-  if (!product.promptBank) {
+  const shouldRefreshPromptBank = !product.promptBank || product.promptBank.language !== language || product.promptBank.market !== market;
+  const promptBank = shouldRefreshPromptBank ? await generatePromptBank(product.profile, language, market) : product.promptBank!;
+  if (shouldRefreshPromptBank) {
     await updateProductPromptBank(productId, promptBank);
   }
 

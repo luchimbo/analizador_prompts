@@ -1,7 +1,7 @@
 const env = {
   appName: process.env.APP_NAME ?? "IA Product Audit",
   defaultLanguage: process.env.DEFAULT_LANGUAGE ?? "es",
-  defaultMarket: process.env.DEFAULT_MARKET ?? "AR",
+  defaultMarket: process.env.DEFAULT_MARKET ?? "Argentina",
   verifyDetectedUrls: process.env.VERIFY_DETECTED_URLS === "true",
   tursoDatabaseUrl: process.env.TURSO_DATABASE_URL ?? "file:./data/ia-product-audit.db",
   tursoAuthToken: process.env.TURSO_AUTH_TOKEN ?? "",

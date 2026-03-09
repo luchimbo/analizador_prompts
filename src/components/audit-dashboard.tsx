@@ -13,6 +13,9 @@ const providers = [
 type ProviderValue = (typeof providers)[number]["value"];
 type LoadingAction = "boot" | "add-product" | "select-product" | "prompts" | "run" | "run-detail" | null;
 
+const LOCKED_LANGUAGE = "es";
+const LOCKED_MARKET = "Argentina";
+
 export function AuditDashboard() {
   const [productUrl, setProductUrl] = useState("");
   const [products, setProducts] = useState<ProductListItem[]>([]);
@@ -22,8 +25,6 @@ export function AuditDashboard() {
   const [activeRun, setActiveRun] = useState<AuditRunResponse | null>(null);
   const [auditedProvider, setAuditedProvider] = useState<ProviderValue>("openai");
   const [auditedModel, setAuditedModel] = useState("");
-  const [language, setLanguage] = useState("es");
-  const [market, setMarket] = useState("AR");
   const [showPrompts, setShowPrompts] = useState(false);
   const [loadingAction, setLoadingAction] = useState<LoadingAction>("boot");
   const [error, setError] = useState<string | null>(null);
@@ -112,8 +113,6 @@ export function AuditDashboard() {
 
       setSelectedProductId(productId);
       setSelectedProduct(product);
-      setLanguage(product.language);
-      setMarket(product.market);
       setShowPrompts(Boolean(product.promptBank));
       setProductRuns(runs);
       setEditingPromptId(null);
@@ -159,7 +158,7 @@ export function AuditDashboard() {
     try {
       const product = await requestJson<SavedProduct>("/api/products", {
         method: "POST",
-        body: JSON.stringify({ productUrl, language, market }),
+        body: JSON.stringify({ productUrl, language: LOCKED_LANGUAGE, market: LOCKED_MARKET }),
       });
       setProductUrl("");
       await loadProducts(product.productId);
@@ -206,8 +205,8 @@ export function AuditDashboard() {
       const payload: ProductRunRequest = {
         auditedProvider,
         auditedModel: auditedModel || undefined,
-        language,
-        market,
+        language: LOCKED_LANGUAGE,
+        market: LOCKED_MARKET,
         enableWebSearch: true,
       };
       setStreamedResults([]);
@@ -335,7 +334,7 @@ export function AuditDashboard() {
           <span className="eyebrow">GEO Product Audit</span>
           <h1>Primero elegis el producto. Despues ves prompts, respuestas y Excel.</h1>
           <p>
-            La interfaz ahora trabaja como una biblioteca de productos: agregas URLs, elegis una ficha guardada, generas sus 50 prompts, elegis que IA la responda y revisas la corrida completa desde el mismo lugar.
+            La interfaz ahora trabaja como una biblioteca de productos para el mercado argentino: agregas URLs, elegis una ficha guardada, generas sus 50 prompts, elegis que IA la responda y revisas la corrida completa desde el mismo lugar.
           </p>
         </div>
         <div className="hero-metrics hero-metrics-tight">
@@ -365,13 +364,13 @@ export function AuditDashboard() {
             onChange={(event) => setProductUrl(event.target.value)}
           />
         </div>
-        <div className="field compact">
-          <label htmlFor="language">Idioma</label>
-          <input id="language" value={language} onChange={(event) => setLanguage(event.target.value)} />
+        <div className="field compact field-locked">
+          <label>Idioma fijo</label>
+          <div className="locked-value">Espanol</div>
         </div>
-        <div className="field compact">
-          <label htmlFor="market">Mercado</label>
-          <input id="market" value={market} onChange={(event) => setMarket(event.target.value)} />
+        <div className="field compact field-locked">
+          <label>Mercado fijo</label>
+          <div className="locked-value">Argentina</div>
         </div>
         <div className="actions full">
           <button className="primary" onClick={handleAddProduct} disabled={!productUrl || hasPendingWork}>
@@ -505,7 +504,7 @@ export function AuditDashboard() {
                     <span>{activeRun ? `Run ${activeRun.runId.slice(0, 8)}` : "sin correr"}</span>
                   </div>
                   <p className="stage-copy">
-                    Elegi que motor va a responder los 50 prompts del producto seleccionado y deja la corrida disponible para revisar y descargar.
+                    Elegi que motor va a responder los 50 prompts del producto seleccionado. Todas las corridas salen fijas para Argentina y quedan disponibles para revisar y descargar.
                   </p>
 
                   <div className="control-grid">

@@ -214,6 +214,17 @@ label,
   background: rgba(255, 255, 255, 0.78);
 }
 
+.locked-value {
+  display: flex;
+  align-items: center;
+  min-height: 52px;
+  padding: 0.9rem 1rem;
+  border-radius: 16px;
+  border: 1px solid rgba(23, 19, 16, 0.12);
+  background: rgba(255, 255, 255, 0.6);
+  color: var(--ink);
+}
+
 .actions {
   display: flex;
   flex-wrap: wrap;

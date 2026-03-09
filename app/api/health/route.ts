@@ -9,6 +9,7 @@ export async function GET() {
     status: "ok",
     openRouterConfigured: Boolean(env.openRouterApiKey),
     databaseMode: env.tursoDatabaseUrl.startsWith("file:") ? "local-libsql" : "turso",
+    lockedMarket: env.defaultMarket,
     defaultOpenAiModel: env.openRouterOpenAiAuditModel,
     defaultGeminiModel: env.openRouterGeminiAuditModel,
     defaultKimiModel: env.openRouterKimiAuditModel,

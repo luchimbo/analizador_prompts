@@ -1,6 +1,6 @@
 # IA Product Audit MVP
 
-Version `Next.js` full-stack para auditar la presencia de un producto dentro de respuestas de IA a partir de una sola URL.
+Version `Next.js` full-stack para auditar la presencia de un producto dentro de respuestas de IA a partir de una sola URL, fijando el experimento solo al mercado argentino.
 
 ## Que hace
 
@@ -13,6 +13,7 @@ Version `Next.js` full-stack para auditar la presencia de un producto dentro de 
 - Genera y guarda un `request_id` unico por prompt para auditar que cada llamada salga aislada.
 - Juzga cada respuesta con otro modelo independiente.
 - Permite revisar corridas historicas y exportar un `Excel` por run.
+- El mercado queda bloqueado a `Argentina` y el idioma de trabajo a `es` para no mezclar paises en la medicion.
 
 ## Stack
 
@@ -53,7 +54,7 @@ La app queda disponible en `http://127.0.0.1:3002`.
 ## Flujo recomendado
 
 1. Abrir la home y pegar una `URL` de producto.
-2. Usar `Guardar producto` para sumarlo a la biblioteca.
+2. Usar `Guardar producto` para sumarlo a la biblioteca argentina.
 3. Elegir uno de los productos disponibles en la columna izquierda.
 4. Generar o revisar sus `50 prompts`.
 5. Elegir que IA responde los prompts y correr la auditoria.
@@ -86,6 +87,7 @@ La app queda disponible en `http://127.0.0.1:3002`.
 - `TURSO_DATABASE_URL`: URL de Turso/libSQL. Para local, el default es `file:./data/ia-product-audit.db`.
 - `TURSO_AUTH_TOKEN`: token de Turso. No hace falta para el modo local `file:`.
 - `VERIFY_DETECTED_URLS`: si esta en `true`, intenta resolver redirects al validar URLs.
+- `DEFAULT_MARKET`: dejarlo en `Argentina` para mantener el experimento fijo al mismo pais.
 
 ## Notas del MVP
 
@@ -95,6 +97,7 @@ La app queda disponible en `http://127.0.0.1:3002`.
 - La UI muestra progreso y resultados a medida que termina cada prompt.
 - El juez usa un enfoque hibrido: reglas duras para `Vendor_Hit` y `Exact_URL_Accuracy`, y LLM para `Product_Hit`, `Product_Competitors` y `Rank`.
 - El Excel se genera on demand al descargarlo.
+- La app ignora cualquier mercado enviado por request y fuerza todas las corridas a `Argentina`.
 
 ## Estructura
 
