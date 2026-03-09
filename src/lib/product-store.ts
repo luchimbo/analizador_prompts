@@ -5,7 +5,13 @@ import { validatePromptBank } from "@/lib/prompt-bank";
 import type { ProductProfile, PromptBank, SavedProduct } from "@/lib/types";
 import { normalizeUrl, normalizeWhitespace } from "@/lib/utils";
 
+declare global {
+  // eslint-disable-next-line no-var
+  var __iaProductAuditProductRepairPromise__: Promise<void> | undefined;
+}
+
 export async function getProductRecord(productId: string): Promise<SavedProduct | null> {
+  await ensureProductDataHealth();
   const db = await getDb();
   const result = await db.execute({ sql: `SELECT * FROM products WHERE product_id = ? LIMIT 1`, args: [productId] });
   const row = result.rows[0];
@@ -13,6 +19,7 @@ export async function getProductRecord(productId: string): Promise<SavedProduct 
 }
 
 export async function listProductRecords(): Promise<SavedProduct[]> {
+  await ensureProductDataHealth();
   const db = await getDb();
   const result = await db.execute(`SELECT * FROM products ORDER BY updated_at DESC`);
   return result.rows.map(mapProductRow);
@@ -29,6 +36,7 @@ export async function upsertProductRecord({
   market: string;
   promptBank?: PromptBank | null;
 }): Promise<SavedProduct> {
+  await ensureProductDataHealth();
   const db = await getDb();
   const targetCanonical = normalizeUrl(profile.canonicalUrl);
   const targetSource = normalizeUrl(profile.sourceUrl);
@@ -41,8 +49,8 @@ export async function upsertProductRecord({
 
   const timestamp = new Date().toISOString();
   const nextPromptBank = promptBank ?? parseJson<PromptBank | null>(existing?.prompt_bank_json, null);
-  const productId = asString(existing?.product_id) ?? randomUUID();
-  const createdAt = asString(existing?.created_at) ?? timestamp;
+  const productId = asNonEmptyString(existing?.product_id) ?? randomUUID();
+  const createdAt = asNonEmptyString(existing?.created_at) ?? timestamp;
   const latestRunId = asNullableString(existing?.latest_run_id);
 
   await db.execute({
@@ -86,6 +94,7 @@ export async function upsertProductRecord({
 }
 
 export async function updateProductPromptBank(productId: string, promptBank: PromptBank): Promise<SavedProduct> {
+  await ensureProductDataHealth();
   const db = await getDb();
   const nextPromptBank = validatePromptBank(promptBank);
   const result = await db.execute({
@@ -105,6 +114,7 @@ export async function updateProductPromptBank(productId: string, promptBank: Pro
 }
 
 export async function updateProductPrompt(productId: string, promptId: string, prompt: string): Promise<SavedProduct> {
+  await ensureProductDataHealth();
   const product = await getProductRecord(productId);
   if (!product) {
     throw new Error("Product not found");
@@ -139,6 +149,7 @@ export async function updateProductPrompt(productId: string, promptId: string, p
 }
 
 export async function updateProductLatestRun(productId: string, latestRunId: string): Promise<SavedProduct> {
+  await ensureProductDataHealth();
   const db = await getDb();
   const result = await db.execute({
     sql: `UPDATE products SET updated_at = ?, latest_run_id = ? WHERE product_id = ?`,
@@ -154,6 +165,44 @@ export async function updateProductLatestRun(productId: string, latestRunId: str
     throw new Error("Product not found");
   }
   return saved;
+}
+
+async function ensureProductDataHealth(): Promise<void> {
+  if (!globalThis.__iaProductAuditProductRepairPromise__) {
+    globalThis.__iaProductAuditProductRepairPromise__ = repairInvalidProductIds();
+  }
+
+  await globalThis.__iaProductAuditProductRepairPromise__;
+}
+
+async function repairInvalidProductIds(): Promise<void> {
+  const db = await getDb();
+  const invalidProducts = await db.execute(`SELECT product_id FROM products WHERE product_id IS NULL OR TRIM(product_id) = ''`);
+
+  for (const row of invalidProducts.rows) {
+    const currentId = typeof row.product_id === "string" ? row.product_id : String(row.product_id ?? "");
+    const nextId = randomUUID();
+
+    if (currentId) {
+      await db.batch(
+        [
+          { sql: `UPDATE products SET product_id = ? WHERE product_id = ?`, args: [nextId, currentId] },
+          { sql: `UPDATE runs SET product_id = ? WHERE product_id = ?`, args: [nextId, currentId] },
+        ],
+        "write",
+      );
+    } else {
+      await db.batch(
+        [
+          { sql: `UPDATE products SET product_id = ? WHERE product_id IS NULL OR TRIM(product_id) = ''`, args: [nextId] },
+          { sql: `UPDATE runs SET product_id = ? WHERE product_id IS NULL OR TRIM(product_id) = ''`, args: [nextId] },
+        ],
+        "write",
+      );
+    }
+  }
+
+  await db.execute(`UPDATE products SET created_at = updated_at WHERE created_at IS NULL OR TRIM(created_at) = ''`);
 }
 
 function mapProductRow(row: Record<string, unknown>): SavedProduct {
@@ -199,9 +248,19 @@ function asString(value: unknown): string {
   return String(value ?? "");
 }
 
+function asNonEmptyString(value: unknown): string | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  const normalized = String(value).trim();
+  return normalized ? normalized : null;
+}
+
 function asNullableString(value: unknown): string | null {
   if (value === null || value === undefined) {
     return null;
   }
-  return String(value);
+  const normalized = String(value);
+  return normalized ? normalized : null;
 }
