@@ -144,11 +144,18 @@ export async function classifyAlternativeMentions({
   const brandRules = await getBrandOverrides();
   const knownBrandMap = buildKnownBrandMap(catalog, brandRules);
   const brandRuleMap = new Map(brandRules.map((rule) => [rule.brand, rule.classification]));
-  const mentionInputs = uniquePreserveOrder([
-    ...mentions,
-    ...(responseText ? extractBrandCandidatesFromResponse(responseText, knownBrandMap, principalSet, ignoredSet) : []),
-  ]);
+  const heuristicBrandCandidates = responseText
+    ? extractBrandCandidatesFromResponse(responseText, knownBrandMap, principalSet, ignoredSet)
+    : [];
+  const mentionInputs = uniquePreserveOrder([...mentions, ...heuristicBrandCandidates]).sort((left, right) => {
+    const tokenDelta = tokenize(right).length - tokenize(left).length;
+    if (tokenDelta !== 0) {
+      return tokenDelta;
+    }
+    return right.length - left.length;
+  });
   const seenInternal = new Set<string>();
+  const seenCoveredBrands = new Set<string>();
   const classifications: AlternativeClassification[] = [];
   let external = 0;
 
@@ -184,8 +191,8 @@ export async function classifyAlternativeMentions({
         mention,
         knownBrandMap,
         brandRuleMap,
-        principalSet,
-        ignoredSet,
+        heuristicBrandCandidates: new Set(heuristicBrandCandidates.map((item) => normalize(item)).filter(Boolean)),
+        coveredBrands: seenCoveredBrands,
       });
       classifications.push(singleTokenClassification.classification);
       if (singleTokenClassification.isExternal) {
@@ -197,6 +204,9 @@ export async function classifyAlternativeMentions({
     const match = findCatalogMatch(mention, catalog);
     if (match) {
       const normalizedBrand = normalize(match.brand ?? "");
+      if (normalizedBrand) {
+        seenCoveredBrands.add(normalizedBrand);
+      }
       const classification = normalizedBrand ? brandRuleMap.get(normalizedBrand) ?? "internal" : "internal";
       if (classification === "external") {
         external += 1;
@@ -222,13 +232,18 @@ export async function classifyAlternativeMentions({
         });
       }
     } else {
-      external += 1;
-      classifications.push({
-        mention: mentionRaw,
-        normalizedMention: mention,
-        classification: "external",
-        reason: "unmatched",
+      const unmatchedClassification = classifyUnmatchedMention({
+        mentionRaw,
+        mention,
+        knownBrandMap,
+        coveredBrands: seenCoveredBrands,
+        principalSet,
+        ignoredSet,
       });
+      classifications.push(unmatchedClassification.classification);
+      if (unmatchedClassification.isExternal) {
+        external += 1;
+      }
     }
   }
 
@@ -484,17 +499,30 @@ function classifySingleTokenMention({
   mention,
   knownBrandMap,
   brandRuleMap,
-  principalSet,
-  ignoredSet,
+  heuristicBrandCandidates,
+  coveredBrands,
 }: {
   mentionRaw: string;
   mention: string;
   knownBrandMap: Map<string, string>;
   brandRuleMap: Map<string, BrandClassification>;
-  principalSet: Set<string>;
-  ignoredSet: Set<string>;
+  heuristicBrandCandidates: Set<string>;
+  coveredBrands: Set<string>;
 }): { classification: AlternativeClassification; isExternal: boolean } {
   const knownBrand = knownBrandMap.get(mention);
+  if (coveredBrands.has(mention)) {
+    return {
+      classification: {
+        mention: mentionRaw,
+        normalizedMention: mention,
+        classification: "ignored",
+        reason: "duplicate_brand",
+        matchedBrand: knownBrand ?? mentionRaw,
+      },
+      isExternal: false,
+    };
+  }
+
   if (knownBrand) {
     const classification = brandRuleMap.get(mention) ?? "internal";
     if (classification === "external") {
@@ -522,7 +550,8 @@ function classifySingleTokenMention({
     };
   }
 
-  if (isLikelyUnknownBrandMention(mentionRaw, mention, principalSet, ignoredSet)) {
+  if (heuristicBrandCandidates.has(mention)) {
+    coveredBrands.add(mention);
     return {
       classification: {
         mention: mentionRaw,
@@ -543,6 +572,51 @@ function classifySingleTokenMention({
       reason: "brand_only",
     },
     isExternal: false,
+  };
+}
+
+function classifyUnmatchedMention({
+  mentionRaw,
+  mention,
+  knownBrandMap,
+  coveredBrands,
+  principalSet,
+  ignoredSet,
+}: {
+  mentionRaw: string;
+  mention: string;
+  knownBrandMap: Map<string, string>;
+  coveredBrands: Set<string>;
+  principalSet: Set<string>;
+  ignoredSet: Set<string>;
+}): { classification: AlternativeClassification; isExternal: boolean } {
+  const inferredBrand = inferBrandFromMention(mentionRaw, mention, knownBrandMap, principalSet, ignoredSet);
+  if (!isLikelyProductLikeMention(mentionRaw, mention, knownBrandMap, principalSet, ignoredSet)) {
+    return {
+      classification: {
+        mention: mentionRaw,
+        normalizedMention: mention,
+        classification: "ignored",
+        reason: "ignored_entity",
+        matchedBrand: inferredBrand ? knownBrandMap.get(inferredBrand) ?? inferredBrand : null,
+      },
+      isExternal: false,
+    };
+  }
+
+  if (inferredBrand) {
+    coveredBrands.add(inferredBrand);
+  }
+
+  return {
+    classification: {
+      mention: mentionRaw,
+      normalizedMention: mention,
+      classification: "external",
+      reason: knownBrandMap.has(inferredBrand ?? "") ? "unmatched" : "unknown_brand",
+      matchedBrand: inferredBrand ? knownBrandMap.get(inferredBrand) ?? mentionRaw.split(/\s+/)[0] ?? null : null,
+    },
+    isExternal: true,
   };
 }
 
@@ -670,20 +744,11 @@ function collectCandidateSegments(responseText: string): string[] {
   const segments: string[] = [];
 
   for (const line of responseText.split(/\r?\n/)) {
-    const cleaned = normalizeWhitespace(line);
-    if (!cleaned) {
-      continue;
-    }
     const listText = line.match(LIST_PATTERN)?.groups?.text;
-    segments.push(normalizeWhitespace(listText ?? cleaned));
-  }
-
-  for (const sentence of responseText.split(/(?<=[.!?])\s+/)) {
-    const cleaned = normalizeWhitespace(sentence);
-    if (!cleaned) {
+    if (!listText) {
       continue;
     }
-    segments.push(cleaned);
+    segments.push(normalizeWhitespace(listText));
   }
 
   return uniquePreserveOrder(segments);
@@ -705,20 +770,62 @@ function looksLikeModelToken(value: string): boolean {
   return /\d/.test(cleaned) || /^[A-Z0-9-]{2,}$/i.test(cleaned);
 }
 
-function isLikelyUnknownBrandMention(mentionRaw: string, mention: string, principalSet: Set<string>, ignoredSet: Set<string>): boolean {
-  if (!mention || mention.length < 3) {
+function inferBrandFromMention(
+  mentionRaw: string,
+  mention: string,
+  knownBrandMap: Map<string, string>,
+  principalSet: Set<string>,
+  ignoredSet: Set<string>,
+): string | null {
+  for (const knownBrand of knownBrandMap.keys()) {
+    if (containsPhrase(mention, knownBrand)) {
+      return knownBrand;
+    }
+  }
+
+  const rawTokens = mentionRaw.split(/\s+/).map(stripOuterPunctuation).filter(Boolean);
+  const firstToken = rawTokens[0];
+  if (!firstToken) {
+    return null;
+  }
+
+  const normalizedFirst = normalize(firstToken);
+  if (!normalizedFirst || GENERIC_BRAND_STOPWORDS.has(normalizedFirst)) {
+    return null;
+  }
+  if (isPrincipalMention(normalizedFirst, principalSet) || isIgnoredEntityMention(normalizedFirst, ignoredSet)) {
+    return null;
+  }
+  if (!hasUppercase(firstToken)) {
+    return null;
+  }
+
+  return normalizedFirst;
+}
+
+function isLikelyProductLikeMention(
+  mentionRaw: string,
+  mention: string,
+  knownBrandMap: Map<string, string>,
+  principalSet: Set<string>,
+  ignoredSet: Set<string>,
+): boolean {
+  const tokens = tokenize(mention);
+  if (tokens.length < 2) {
     return false;
   }
-  if (GENERIC_BRAND_STOPWORDS.has(mention)) {
+  if (isIgnoredEntityMention(mention, ignoredSet) || isPrincipalMention(mention, principalSet)) {
     return false;
   }
-  if (isPrincipalMention(mention, principalSet) || isIgnoredEntityMention(mention, ignoredSet)) {
-    return false;
+
+  const inferredBrand = inferBrandFromMention(mentionRaw, mention, knownBrandMap, principalSet, ignoredSet);
+  const rawTokens = mentionRaw.split(/\s+/).map(stripOuterPunctuation).filter(Boolean);
+  const hasModelSignal = rawTokens.slice(1).some(looksLikeModelToken);
+  if (inferredBrand && hasModelSignal) {
+    return true;
   }
-  if (/^\d+$/.test(mention)) {
-    return false;
-  }
-  return hasUppercase(mentionRaw);
+
+  return tokens.length >= 3 && hasModelSignal;
 }
 
 function parseJson<T>(value: unknown, fallback: T): T {
