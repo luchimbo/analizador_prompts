@@ -250,15 +250,18 @@ async function getBrandOverrides(): Promise<BrandOverrideRow[]> {
 }
 
 function findCatalogMatch(mention: string, catalog: CatalogRow[]): CatalogRow | null {
-  const tokens = mention.split(" ").filter(Boolean);
-  if (!tokens.length) {
+  const mentionTokens = tokenize(mention);
+  if (!mentionTokens.length) {
     return null;
   }
 
   // Rule: brand-only mentions do not count.
-  if (tokens.length === 1) {
+  if (mentionTokens.length === 1) {
     return null;
   }
+
+  const mentionExpanded = expandMatchTokens(mentionTokens);
+  const mentionCompact = compact(mention);
 
   for (const row of catalog) {
     const normalized = row.normalized_name;
@@ -266,17 +269,24 @@ function findCatalogMatch(mention: string, catalog: CatalogRow[]): CatalogRow | 
       continue;
     }
 
+    const normalizedCompact = compact(normalized);
+
     if (normalized.includes(mention) || mention.includes(normalized)) {
       return row;
     }
 
-    const familyTokens = parseTokens(row.family_tokens_json);
-    if (familyTokens.length >= 2) {
-      const matches = familyTokens.filter((token) => mention.includes(token));
-      if (matches.length >= 2) {
-        return row;
-      }
+    if (mentionCompact && normalizedCompact && (normalizedCompact.includes(mentionCompact) || mentionCompact.includes(normalizedCompact))) {
+      return row;
     }
+
+    const rowTokens = expandMatchTokens(tokenize(normalized));
+    const familyTokens = expandMatchTokens(parseTokens(row.family_tokens_json));
+    const rowTokenSet = new Set<string>([...rowTokens, ...familyTokens]);
+    const overlap = Array.from(mentionExpanded).filter((token) => token.length >= 3 && rowTokenSet.has(token));
+    if (overlap.length >= 2) {
+      return row;
+    }
+
   }
 
   return null;
@@ -311,6 +321,36 @@ function normalize(value: string): string {
     .replace(/[^a-z0-9\s-]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function tokenize(value: string): string[] {
+  return normalize(value).split(" ").filter(Boolean);
+}
+
+function expandMatchTokens(tokens: string[]): Set<string> {
+  const expanded = new Set<string>();
+  for (const token of tokens) {
+    expanded.add(token);
+    expanded.add(compact(token));
+  }
+
+  for (let index = 0; index < tokens.length - 1; index += 1) {
+    const current = tokens[index];
+    const next = tokens[index + 1];
+    if (!current || !next) {
+      continue;
+    }
+    if ((/^[a-z]+$/.test(current) && /^\d+[a-z]*$/.test(next)) || (/^\d+[a-z]*$/.test(current) && /^[a-z]+$/.test(next))) {
+      expanded.add(`${current}${next}`);
+      expanded.add(`${next}${current}`);
+    }
+  }
+
+  return expanded;
+}
+
+function compact(value: string): string {
+  return normalize(value).replace(/\s+/g, "");
 }
 
 function parseJson<T>(value: unknown, fallback: T): T {

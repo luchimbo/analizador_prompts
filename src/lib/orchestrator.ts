@@ -386,8 +386,8 @@ function round(value: number): number {
 }
 
 function normalizeAuditedProvider(provider: AuditedProvider): AuditedProvider {
-  if (provider === "kimi") {
-    return "grok";
+  if (provider === "openai" || provider === "gemini" || provider === "custom") {
+    return provider;
   }
-  return provider;
+  return "custom";
 }

@@ -7,7 +7,7 @@ import type { AuditRunResponse, ProductListItem, ProductRunRequest, PromptAuditR
 const providers = [
   { value: "openai", label: "OpenAI" },
   { value: "gemini", label: "Gemini" },
-  { value: "grok", label: "Grok" },
+  { value: "custom", label: "Custom" },
 ] as const;
 
 type ProviderValue = (typeof providers)[number]["value"];
@@ -19,8 +19,6 @@ const LOCKED_MARKET = "Argentina";
 interface HealthConfig {
   defaultOpenAiModel?: string;
   defaultGeminiModel?: string;
-  defaultGrokModel?: string;
-  defaultKimiModel?: string;
 }
 
 interface CatalogBrandRule {
@@ -63,7 +61,7 @@ export function AuditDashboard() {
   const [defaultModels, setDefaultModels] = useState<Record<ProviderValue, string>>({
     openai: "",
     gemini: "",
-    grok: "",
+    custom: "",
   });
 
   const hasPendingWork = loadingAction !== null;
@@ -156,7 +154,7 @@ export function AuditDashboard() {
       const mappedDefaults: Record<ProviderValue, string> = {
         openai: health.defaultOpenAiModel ?? "",
         gemini: health.defaultGeminiModel ?? "",
-        grok: health.defaultGrokModel ?? health.defaultKimiModel ?? "",
+        custom: "",
       };
       setDefaultModels(mappedDefaults);
 
@@ -896,7 +894,10 @@ function formatDate(value: string): string {
 }
 
 function normalizeProvider(provider: string | null | undefined): string {
-  return provider === "kimi" ? "grok" : provider ?? "";
+  if (provider === "openai" || provider === "gemini" || provider === "custom") {
+    return provider;
+  }
+  return "custom";
 }
 
 function formatProviderLabel(provider: string | null | undefined): string {
@@ -906,9 +907,6 @@ function formatProviderLabel(provider: string | null | undefined): string {
   }
   if (normalized === "gemini") {
     return "Gemini";
-  }
-  if (normalized === "grok") {
-    return "Grok";
   }
   if (normalized === "custom") {
     return "Custom";

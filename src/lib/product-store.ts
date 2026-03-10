@@ -329,7 +329,10 @@ function normalizeProvider(value: string | null): string | null {
   if (!value) {
     return value;
   }
-  return value === "kimi" ? "grok" : value;
+  if (value === "openai" || value === "gemini" || value === "custom") {
+    return value;
+  }
+  return "custom";
 }
 
 function parseJson<T>(value: unknown, fallback: T): T {

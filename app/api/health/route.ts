@@ -12,7 +12,5 @@ export async function GET() {
     lockedMarket: env.defaultMarket,
     defaultOpenAiModel: env.openRouterOpenAiAuditModel,
     defaultGeminiModel: env.openRouterGeminiAuditModel,
-    defaultGrokModel: env.openRouterGrokAuditModel,
-    defaultKimiModel: env.openRouterGrokAuditModel,
   });
 }

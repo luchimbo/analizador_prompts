@@ -1,5 +1,5 @@
 export type PromptType = "problem" | "discovery" | "comparison" | "transactional" | "branded";
-export type AuditedProvider = "openai" | "gemini" | "grok" | "kimi" | "custom";
+export type AuditedProvider = "openai" | "gemini" | "custom";
 export type RunStatus = "pending" | "running" | "completed" | "failed";
 
 export interface ProductProfileOverrides {
