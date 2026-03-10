@@ -1,4 +1,5 @@
 import { getDb } from "@/lib/db";
+import type { AlternativeClassification } from "@/lib/types";
 import { normalizeWhitespace } from "@/lib/utils";
 
 interface CatalogRow {
@@ -28,6 +29,7 @@ const LIST_PATTERN = /^\s*(?:[-*]|\d+[).])\s+(?<text>.+)$/;
 export interface ClassifiedAlternatives {
   internalAlternatives: number;
   externalCompetitors: number;
+  classifications: AlternativeClassification[];
 }
 
 let cache: { loadedAt: number; rows: CatalogRow[] } | null = null;
@@ -46,6 +48,7 @@ export async function classifyAlternativeMentions({
   const brandRules = await getBrandOverrides();
   const brandRuleMap = new Map(brandRules.map((rule) => [rule.brand, rule.classification]));
   const seenInternal = new Set<string>();
+  const classifications: AlternativeClassification[] = [];
   let external = 0;
 
   for (const mentionRaw of mentions) {
@@ -55,6 +58,22 @@ export async function classifyAlternativeMentions({
     }
 
     if (isPrincipalMention(mention, principalSet)) {
+      classifications.push({
+        mention: mentionRaw,
+        normalizedMention: mention,
+        classification: "ignored",
+        reason: "principal_mention",
+      });
+      continue;
+    }
+
+    if (tokenize(mention).length === 1) {
+      classifications.push({
+        mention: mentionRaw,
+        normalizedMention: mention,
+        classification: "ignored",
+        reason: "brand_only",
+      });
       continue;
     }
 
@@ -64,17 +83,42 @@ export async function classifyAlternativeMentions({
       const classification = normalizedBrand ? brandRuleMap.get(normalizedBrand) ?? "internal" : "internal";
       if (classification === "external") {
         external += 1;
+        classifications.push({
+          mention: mentionRaw,
+          normalizedMention: mention,
+          classification: "external",
+          reason: normalizedBrand ? "brand_override" : "catalog_match",
+          matchedSku: match.sku,
+          matchedName: match.name,
+          matchedBrand: match.brand,
+        });
       } else {
         seenInternal.add(match.sku);
+        classifications.push({
+          mention: mentionRaw,
+          normalizedMention: mention,
+          classification: "internal",
+          reason: "catalog_match",
+          matchedSku: match.sku,
+          matchedName: match.name,
+          matchedBrand: match.brand,
+        });
       }
     } else {
       external += 1;
+      classifications.push({
+        mention: mentionRaw,
+        normalizedMention: mention,
+        classification: "external",
+        reason: "unmatched",
+      });
     }
   }
 
   return {
     internalAlternatives: seenInternal.size,
     externalCompetitors: external,
+    classifications,
   };
 }
 
@@ -186,6 +230,7 @@ export async function reclassifyHistoricalRunResults(): Promise<{ updated: numbe
         SET internal_alternatives = ?,
             external_competitors = ?,
             alternative_mentions_json = ?,
+            alternative_classifications_json = ?,
             product_competitors = ?
         WHERE id = ?
       `,
@@ -193,6 +238,7 @@ export async function reclassifyHistoricalRunResults(): Promise<{ updated: numbe
         alternatives.internalAlternatives,
         alternatives.externalCompetitors,
         JSON.stringify(mentions),
+        JSON.stringify(alternatives.classifications),
         productCompetitors || fallbackProductCompetitors,
         id,
       ],

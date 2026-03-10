@@ -102,7 +102,11 @@ export async function ensureDatabaseSchema(): Promise<void> {
             prompt_bank_json TEXT NOT NULL,
             summary_json TEXT,
             export_path TEXT,
-            error_message TEXT
+            error_message TEXT,
+            error_stage TEXT,
+            failed_prompt_id TEXT,
+            failed_prompt_text TEXT,
+            completed_prompts INTEGER NOT NULL DEFAULT 0
           )
           `,
           `CREATE INDEX IF NOT EXISTS idx_runs_created_at ON runs(created_at DESC)`,
@@ -135,10 +139,33 @@ export async function ensureDatabaseSchema(): Promise<void> {
             judge_provider TEXT,
             judge_model TEXT,
             judge_notes TEXT,
+            scoring_reasons_json TEXT,
+            alternative_classifications_json TEXT,
             FOREIGN KEY(run_id) REFERENCES runs(run_id)
           )
           `,
           `CREATE INDEX IF NOT EXISTS idx_run_results_run_id ON run_results(run_id, prompt_order ASC)`,
+          `
+          CREATE TABLE IF NOT EXISTS run_prompt_states (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            run_id TEXT NOT NULL,
+            prompt_order INTEGER NOT NULL,
+            prompt_id TEXT NOT NULL,
+            prompt_type TEXT NOT NULL,
+            prompt_text TEXT NOT NULL,
+            status TEXT NOT NULL,
+            attempt_count INTEGER NOT NULL DEFAULT 0,
+            error_stage TEXT,
+            error_message TEXT,
+            request_id TEXT,
+            started_at TEXT,
+            completed_at TEXT,
+            updated_at TEXT NOT NULL,
+            UNIQUE(run_id, prompt_id),
+            FOREIGN KEY(run_id) REFERENCES runs(run_id)
+          )
+          `,
+          `CREATE INDEX IF NOT EXISTS idx_prompt_states_run ON run_prompt_states(run_id, prompt_order ASC)`,
         ],
         "write",
       )
@@ -147,8 +174,14 @@ export async function ensureDatabaseSchema(): Promise<void> {
         await ensureColumn("run_results", "internal_alternatives", `ALTER TABLE run_results ADD COLUMN internal_alternatives INTEGER NOT NULL DEFAULT 0`);
         await ensureColumn("run_results", "external_competitors", `ALTER TABLE run_results ADD COLUMN external_competitors INTEGER NOT NULL DEFAULT 0`);
         await ensureColumn("run_results", "alternative_mentions_json", `ALTER TABLE run_results ADD COLUMN alternative_mentions_json TEXT`);
+        await ensureColumn("run_results", "scoring_reasons_json", `ALTER TABLE run_results ADD COLUMN scoring_reasons_json TEXT`);
+        await ensureColumn("run_results", "alternative_classifications_json", `ALTER TABLE run_results ADD COLUMN alternative_classifications_json TEXT`);
         await ensureColumn("products", "locked_audited_provider", `ALTER TABLE products ADD COLUMN locked_audited_provider TEXT`);
         await ensureColumn("products", "locked_audited_model", `ALTER TABLE products ADD COLUMN locked_audited_model TEXT`);
+        await ensureColumn("runs", "error_stage", `ALTER TABLE runs ADD COLUMN error_stage TEXT`);
+        await ensureColumn("runs", "failed_prompt_id", `ALTER TABLE runs ADD COLUMN failed_prompt_id TEXT`);
+        await ensureColumn("runs", "failed_prompt_text", `ALTER TABLE runs ADD COLUMN failed_prompt_text TEXT`);
+        await ensureColumn("runs", "completed_prompts", `ALTER TABLE runs ADD COLUMN completed_prompts INTEGER NOT NULL DEFAULT 0`);
         await client.execute(`CREATE INDEX IF NOT EXISTS idx_run_results_request_id ON run_results(request_id)`);
       })
       .then(() => undefined);

@@ -77,11 +77,30 @@ export interface JudgedMetrics {
   internalAlternatives: number;
   externalCompetitors: number;
   rank: number;
+  scoringReasons?: ScoringReasons;
   alternativeMentions?: string[];
+  alternativeClassifications?: AlternativeClassification[];
   evidenceSnippet?: string | null;
   judgeProvider?: string | null;
   judgeModel?: string | null;
   judgeNotes?: string | null;
+}
+
+export interface ScoringReasons {
+  productHitReason: string;
+  rankReason: string;
+  vendorHitReason: string;
+  exactUrlReason: string;
+}
+
+export interface AlternativeClassification {
+  mention: string;
+  normalizedMention: string;
+  classification: "internal" | "external" | "ignored";
+  reason: "principal_mention" | "brand_only" | "catalog_match" | "brand_override" | "unmatched";
+  matchedSku?: string | null;
+  matchedName?: string | null;
+  matchedBrand?: string | null;
 }
 
 export interface PromptAuditResult extends PromptExecutionResult, JudgedMetrics {}
@@ -120,6 +139,11 @@ export interface AuditRunResponse {
   summary?: RunSummary | null;
   exportPath?: string | null;
   errorMessage?: string | null;
+  errorStage?: string | null;
+  failedPromptId?: string | null;
+  failedPromptText?: string | null;
+  completedPrompts?: number;
+  resumable?: boolean;
 }
 
 export interface RunListItem {
@@ -171,6 +195,7 @@ export interface CreateProductRequest {
 }
 
 export interface ProductRunRequest {
+  resumeRunId?: string;
   auditedProvider?: AuditedProvider;
   auditedModel?: string;
   language?: string;

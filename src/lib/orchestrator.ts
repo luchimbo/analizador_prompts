@@ -6,7 +6,22 @@ import { judgeExecution } from "@/lib/judge";
 import { buildProductProfile } from "@/lib/product-profiler";
 import { generatePromptBank } from "@/lib/prompt-bank";
 import { deleteProductRecord, getProductRecord, listProductRecords, updateProductAuditLock, updateProductLatestRun, updateProductPromptBank, upsertProductRecord } from "@/lib/product-store";
-import { appendRunResult, countRunsByProduct, createRunRecord, finalizeRunRecord, getRun, listRuns, listRunsByProduct } from "@/lib/run-store";
+import {
+  appendRunResult,
+  countRunsByProduct,
+  createRunRecord,
+  finalizeRunRecord,
+  findResumableRun,
+  getRun,
+  getRunPromptStates,
+  listRuns,
+  listRunsByProduct,
+  markPromptStateCompleted,
+  markPromptStateFailed,
+  markPromptStateRunning,
+  markRunAsRunning,
+  seedRunPromptStates,
+} from "@/lib/run-store";
 import type {
   AuditRunRequest,
   AuditRunResponse,
@@ -172,6 +187,7 @@ export async function runProductAudit(productId: string, request: ProductRunRequ
     market,
     enableWebSearch: request.enableWebSearch ?? true,
     verifyDetectedUrls: request.verifyDetectedUrls ?? env.verifyDetectedUrls,
+    resumeRunId: request.resumeRunId,
   });
 
   await updateProductLatestRun(productId, run.runId);
@@ -214,6 +230,7 @@ export async function runProductAuditWithProgress(
     market,
     enableWebSearch: request.enableWebSearch ?? true,
     verifyDetectedUrls: request.verifyDetectedUrls ?? env.verifyDetectedUrls,
+    resumeRunId: request.resumeRunId,
     onProgress,
   });
 
@@ -233,6 +250,7 @@ async function executeAuditFlow({
   market,
   enableWebSearch,
   verifyDetectedUrls,
+  resumeRunId,
   onProgress,
 }: {
   productId: string | null;
@@ -244,6 +262,7 @@ async function executeAuditFlow({
   market: string;
   enableWebSearch: boolean;
   verifyDetectedUrls: boolean;
+  resumeRunId?: string;
   onProgress?: (update: {
     current: number;
     total: number;
@@ -254,31 +273,74 @@ async function executeAuditFlow({
   }) => Promise<void> | void;
 }): Promise<AuditRunResponse> {
   const createdAt = new Date().toISOString();
-  const runId = randomUUID();
+  const existingRun =
+    productId && resumeRunId
+      ? await getRun(resumeRunId)
+      : productId
+        ? await findResumableRun(productId, auditedProvider, auditedModel)
+        : null;
+
+  const canResume =
+    Boolean(existingRun) &&
+    existingRun?.productId === productId &&
+    existingRun.auditedProvider === auditedProvider &&
+    existingRun.auditedModel === auditedModel &&
+    existingRun.promptBank?.prompts?.length === promptBank.prompts.length;
+
+  const runId = canResume && existingRun ? existingRun.runId : randomUUID();
+  const runCreatedAt = canResume && existingRun ? existingRun.createdAt : createdAt;
   const results: PromptAuditResult[] = [];
   const total = promptBank.prompts.length;
 
-  await createRunRecord({
-    runId,
-    productId,
-    status: "running",
-    createdAt,
-    auditedProvider,
-    auditedModel,
-    language,
-    market,
-    enableWebSearch,
-    verifyDetectedUrls,
-    productProfile: profile,
-    promptBank,
-  });
+  if (!canResume) {
+    await createRunRecord({
+      runId,
+      productId,
+      status: "running",
+      createdAt: runCreatedAt,
+      auditedProvider,
+      auditedModel,
+      language,
+      market,
+      enableWebSearch,
+      verifyDetectedUrls,
+      productProfile: profile,
+      promptBank,
+    });
+    await seedRunPromptStates(runId, promptBank);
+  }
 
   try {
     const orderedResults = new Array<PromptAuditResult>(total);
+    if (canResume && existingRun) {
+      for (const result of existingRun.results) {
+        const index = promptBank.prompts.findIndex((item) => item.id === result.promptId);
+        if (index >= 0) {
+          orderedResults[index] = result;
+        }
+      }
+      await markRunAsRunning(runId, existingRun.results.length);
+    }
+
     const concurrency = Math.max(1, Math.min(env.runConcurrency || 1, total));
-    let nextIndex = 0;
-    let completed = 0;
+    const promptStates = await getRunPromptStates(runId);
+    const completedPromptIds = new Set(
+      promptStates.filter((state) => state.status === "completed").map((state) => state.promptId),
+    );
+    for (const result of orderedResults.filter((item): item is PromptAuditResult => Boolean(item))) {
+      completedPromptIds.add(result.promptId);
+    }
+    const remainingIndexes = promptBank.prompts
+      .map((prompt, index) => ({ prompt, index }))
+      .filter(({ prompt }) => !completedPromptIds.has(prompt.id))
+      .map(({ index }) => index);
+
+    let remainingPointer = 0;
+    let completed = canResume && existingRun ? existingRun.results.length : 0;
     let workerError: Error | null = null;
+    let workerErrorStage: string | null = null;
+    let workerFailedPromptId: string | null = null;
+    let workerFailedPromptText: string | null = null;
 
     const worker = async () => {
       while (true) {
@@ -286,15 +348,23 @@ async function executeAuditFlow({
           return;
         }
 
-        const currentIndex = nextIndex;
-        nextIndex += 1;
-        if (currentIndex >= total) {
+        const currentIndex = remainingIndexes[remainingPointer];
+        remainingPointer += 1;
+        if (currentIndex === undefined) {
           return;
         }
 
         const prompt = promptBank.prompts[currentIndex];
 
         try {
+          await markPromptStateRunning({
+            runId,
+            promptOrder: currentIndex + 1,
+            promptId: prompt.id,
+            promptType: prompt.type,
+            promptText: prompt.prompt,
+          });
+
           const execution = await executeAuditPrompt({
             prompt,
             auditedProvider,
@@ -307,6 +377,7 @@ async function executeAuditFlow({
           const result: PromptAuditResult = { ...execution, ...judged };
           orderedResults[currentIndex] = result;
           await appendRunResult(runId, currentIndex + 1, result);
+          await markPromptStateCompleted(runId, prompt.id, result.requestId);
           completed += 1;
           if (onProgress) {
             await onProgress({
@@ -320,6 +391,15 @@ async function executeAuditFlow({
           }
         } catch (error) {
           workerError = error instanceof Error ? error : new Error("Unknown error");
+          workerErrorStage = inferErrorStage(workerError.message);
+          workerFailedPromptId = prompt.id;
+          workerFailedPromptText = prompt.prompt;
+          await markPromptStateFailed({
+            runId,
+            promptId: prompt.id,
+            errorStage: workerErrorStage,
+            errorMessage: workerError.message,
+          });
           return;
         }
       }
@@ -327,20 +407,32 @@ async function executeAuditFlow({
 
     await Promise.all(Array.from({ length: concurrency }, () => worker()));
 
-    if (workerError) {
-      throw workerError;
+    if (workerError !== null) {
+      const failedError: Error = workerError;
+      const partialResults = orderedResults.filter((result): result is PromptAuditResult => Boolean(result));
+      await finalizeRunRecord({
+        runId,
+        status: "failed",
+        summary: partialResults.length ? buildSummary(partialResults) : null,
+        errorMessage: failedError.message,
+        errorStage: workerErrorStage ?? inferErrorStage(failedError.message),
+        failedPromptId: workerFailedPromptId,
+        failedPromptText: workerFailedPromptText,
+        completedPrompts: partialResults.length,
+      });
+      throw failedError;
     }
 
     results.push(...orderedResults.filter((result): result is PromptAuditResult => Boolean(result)));
 
     const summary = buildSummary(results);
-    await finalizeRunRecord({ runId, status: "completed", summary });
+    await finalizeRunRecord({ runId, status: "completed", summary, completedPrompts: results.length });
 
     return {
       runId,
       productId,
       status: "completed",
-      createdAt,
+      createdAt: runCreatedAt,
       auditedProvider,
       auditedModel,
       productProfile: profile,
@@ -349,16 +441,46 @@ async function executeAuditFlow({
       summary,
       exportPath: `/api/runs/${runId}/excel`,
       errorMessage: null,
+      errorStage: null,
+      failedPromptId: null,
+      failedPromptText: null,
+      completedPrompts: results.length,
+      resumable: false,
     };
   } catch (error) {
-    await finalizeRunRecord({
-      runId,
-      status: "failed",
-      summary: results.length ? buildSummary(results) : null,
-      errorMessage: error instanceof Error ? error.message : "Unknown error",
-    });
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    const currentRun = await getRun(runId);
+    if (!currentRun || currentRun.status !== "failed") {
+      await finalizeRunRecord({
+        runId,
+        status: "failed",
+        summary: results.length ? buildSummary(results) : null,
+        errorMessage,
+        errorStage: inferErrorStage(errorMessage),
+        failedPromptId: null,
+        failedPromptText: null,
+        completedPrompts: results.length,
+      });
+    }
     throw error;
   }
+}
+
+function inferErrorStage(message: string): string {
+  const lowered = message.toLowerCase();
+  if (lowered.includes("openrouter") || lowered.includes("timeout") || lowered.includes("429")) {
+    return "audit_model";
+  }
+  if (lowered.includes("judge")) {
+    return "judge";
+  }
+  if (lowered.includes("url") || lowered.includes("redirect")) {
+    return "url_verify";
+  }
+  if (lowered.includes("sql") || lowered.includes("db") || lowered.includes("database")) {
+    return "db_write";
+  }
+  return "unknown";
 }
 
 function buildSummary(results: PromptAuditResult[]): RunSummary {

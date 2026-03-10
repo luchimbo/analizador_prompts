@@ -1,7 +1,7 @@
 import { classifyAlternativeMentions } from "@/lib/catalog";
 import { env } from "@/lib/env";
 import { openRouterChatJson } from "@/lib/openrouter";
-import type { JudgedMetrics, ProductProfile, PromptExecutionResult } from "@/lib/types";
+import type { JudgedMetrics, ProductProfile, PromptExecutionResult, ScoringReasons } from "@/lib/types";
 import { clip, normalizeUrl, normalizeWhitespace, uniquePreserveOrder } from "@/lib/utils";
 
 const LIST_PATTERN = /^\s*(?:[-*]|\d+[).])\s+(?<text>.+)$/;
@@ -44,9 +44,11 @@ export async function judgeExecution({
 }): Promise<JudgedMetrics> {
   const llmMetrics = await judgeWithModel(profile, execution);
   const heuristicHit = computeHeuristicProductHit(profile, execution.rawResponse);
-  const heuristicRank = estimateRank(execution.rawResponse, [profile.productName, ...profile.aliases]);
-  const productHit = Math.max(Number(llmMetrics.productHit ?? 0), heuristicHit);
-  const rank = Math.max(Number(llmMetrics.rank ?? 0), heuristicRank);
+  const heuristicRank = heuristicHit ? estimateRank(execution.rawResponse, [profile.productName, ...profile.aliases]) : 0;
+  const llmHit = Number(llmMetrics.productHit ?? 0);
+  const llmRank = Number(llmMetrics.rank ?? 0);
+  const productHit = llmHit === 1 && heuristicHit === 1 ? 1 : 0;
+  const rank = productHit ? clampRank(Math.min(llmRank || heuristicRank, heuristicRank || llmRank), 1, 50) : 0;
   const evidenceSnippet = llmMetrics.evidenceSnippet ?? extractEvidence(profile, execution.rawResponse);
 
   const mentions = uniquePreserveOrder((llmMetrics.alternativeMentions ?? []).map((item) => normalizeWhitespace(item)).filter(Boolean));
@@ -57,6 +59,24 @@ export async function judgeExecution({
 
   const vendorHit = productHit ? computeVendorHit(profile, execution.rawResponse) : 0;
   const exactUrlAccuracy = productHit ? await computeExactUrlAccuracy(profile, execution.detectedUrls, verifyDetectedUrls) : 0;
+  const scoringReasons: ScoringReasons = {
+    productHitReason:
+      productHit === 1
+        ? "Coincidencia estricta entre juez y heuristica: el producto objetivo aparece recomendado de forma explicita."
+        : "No hubo coincidencia estricta entre juez y heuristica para recomendacion explicita del producto objetivo.",
+    rankReason:
+      rank > 0
+        ? `Rank asignado por consenso estricto (juez/heuristica): ${rank}.`
+        : "Sin recomendacion explicita del producto objetivo, rank se fija en 0.",
+    vendorHitReason:
+      vendorHit === 1
+        ? "Se detecto una referencia explicita a la tienda/proveedor junto con recomendacion valida del producto."
+        : "No se detecto referencia valida a tienda/proveedor o no hubo product hit.",
+    exactUrlReason:
+      exactUrlAccuracy === 1
+        ? "Se encontro URL canonica exacta (directa o resuelta)."
+        : "No se encontro URL canonica exacta para esta respuesta.",
+  };
 
   return {
     productHit: Math.max(productHit, 0),
@@ -65,7 +85,9 @@ export async function judgeExecution({
     internalAlternatives: Math.max(alternatives.internalAlternatives, 0),
     externalCompetitors: Math.max(alternatives.externalCompetitors, 0),
     rank: Math.max(rank, 0),
+    scoringReasons,
     alternativeMentions: mentions,
+    alternativeClassifications: alternatives.classifications,
     evidenceSnippet,
     judgeProvider: env.openRouterApiKey ? "openrouter" : "heuristic",
     judgeModel: env.openRouterApiKey ? env.openRouterJudgeModel : "rules",
@@ -206,7 +228,7 @@ function estimateRank(responseText: string, aliases: string[]): number {
       return index + 1;
     }
   }
-  return 1;
+  return 0;
 }
 
 function estimateAlternativeMentions(responseText: string, aliases: string[]): string[] {
@@ -269,4 +291,11 @@ function normalizeForMatch(value: string): string {
 
 function compactForMatch(value: string): string {
   return value.replace(/\s+/g, "");
+}
+
+function clampRank(value: number, min: number, max: number): number {
+  if (!Number.isFinite(value) || value <= 0) {
+    return 0;
+  }
+  return Math.max(min, Math.min(max, Math.round(value)));
 }

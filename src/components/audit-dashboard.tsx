@@ -58,6 +58,11 @@ export function AuditDashboard() {
   const [savingBrand, setSavingBrand] = useState<string | null>(null);
   const [reclassifyingHistory, setReclassifyingHistory] = useState(false);
   const [reclassifyMessage, setReclassifyMessage] = useState<string | null>(null);
+  const [leftCompareRunId, setLeftCompareRunId] = useState<string>("");
+  const [rightCompareRunId, setRightCompareRunId] = useState<string>("");
+  const [leftCompareRun, setLeftCompareRun] = useState<AuditRunResponse | null>(null);
+  const [rightCompareRun, setRightCompareRun] = useState<AuditRunResponse | null>(null);
+  const [loadingComparison, setLoadingComparison] = useState(false);
   const [defaultModels, setDefaultModels] = useState<Record<ProviderValue, string>>({
     openai: "",
     gemini: "",
@@ -130,6 +135,50 @@ export function AuditDashboard() {
       },
     );
   }, [catalogBrandRules]);
+
+  const comparisonSummary = useMemo(() => {
+    if (!leftCompareRun?.summary || !rightCompareRun?.summary) {
+      return null;
+    }
+
+    const before = leftCompareRun.summary;
+    const after = rightCompareRun.summary;
+    return [
+      { label: "Product Hit", before: before.productHitRate, after: after.productHitRate, percent: true },
+      { label: "Vendor Hit", before: before.vendorHitRate, after: after.vendorHitRate, percent: true },
+      { label: "URL Accuracy", before: before.exactUrlAccuracyRate, after: after.exactUrlAccuracyRate, percent: true },
+      { label: "Avg Internal", before: before.averageInternalAlternatives, after: after.averageInternalAlternatives, percent: false },
+      { label: "Avg External", before: before.averageExternalCompetitors, after: after.averageExternalCompetitors, percent: false },
+      { label: "Avg Rank", before: before.averageRankWhenPresent, after: after.averageRankWhenPresent, percent: false },
+    ];
+  }, [leftCompareRun, rightCompareRun]);
+
+  const comparisonPromptDiffs = useMemo(() => {
+    if (!leftCompareRun || !rightCompareRun) {
+      return [] as Array<{ promptId: string; before: PromptAuditResult; after: PromptAuditResult }>;
+    }
+
+    const leftByPrompt = new Map(leftCompareRun.results.map((result) => [result.promptId, result]));
+    const rightByPrompt = new Map(rightCompareRun.results.map((result) => [result.promptId, result]));
+    const diffs: Array<{ promptId: string; before: PromptAuditResult; after: PromptAuditResult }> = [];
+
+    for (const [promptId, before] of leftByPrompt.entries()) {
+      const after = rightByPrompt.get(promptId);
+      if (!after) {
+        continue;
+      }
+      if (
+        before.productHit !== after.productHit ||
+        before.rank !== after.rank ||
+        before.internalAlternatives !== after.internalAlternatives ||
+        before.externalCompetitors !== after.externalCompetitors
+      ) {
+        diffs.push({ promptId, before, after });
+      }
+    }
+
+    return diffs;
+  }, [leftCompareRun, rightCompareRun]);
 
   async function requestJson<T>(input: string, init?: RequestInit): Promise<T> {
     const response = await fetch(input, {
@@ -263,6 +312,12 @@ export function AuditDashboard() {
       setProductRuns(runs);
       setRunProgress(null);
       setStreamedResults([]);
+      const defaultLeft = runs[1]?.runId ?? runs[0]?.runId ?? "";
+      const defaultRight = runs[0]?.runId ?? "";
+      setLeftCompareRunId(defaultLeft);
+      setRightCompareRunId(defaultRight);
+      setLeftCompareRun(null);
+      setRightCompareRun(null);
 
       const nextRunId = runId ?? product.latestRunId ?? runs[0]?.runId ?? null;
       if (nextRunId) {
@@ -365,7 +420,7 @@ export function AuditDashboard() {
     }
   }
 
-  async function handleRunAudit() {
+  async function handleRunAudit(resumeRunId?: string) {
     if (!selectedProductId || !hasReadyPromptBank) {
       return;
     }
@@ -380,6 +435,7 @@ export function AuditDashboard() {
         language: LOCKED_LANGUAGE,
         market: LOCKED_MARKET,
         enableWebSearch: true,
+        resumeRunId,
       };
       setStreamedResults([]);
       setActiveRun(null);
@@ -452,6 +508,7 @@ export function AuditDashboard() {
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : "No se pudo ejecutar la auditoria");
       setRunProgress(null);
+      await loadProductWorkspace(selectedProductId);
     } finally {
       setLoadingAction(null);
     }
@@ -462,6 +519,26 @@ export function AuditDashboard() {
     setProducts(items);
     if (!selectedProductId && items[0]?.productId) {
       setSelectedProductId(preferredProductId ?? items[0].productId);
+    }
+  }
+
+  async function handleLoadComparison() {
+    if (!leftCompareRunId || !rightCompareRunId) {
+      return;
+    }
+    setLoadingComparison(true);
+    setError(null);
+    try {
+      const [left, right] = await Promise.all([
+        requestJson<AuditRunResponse>(`/api/runs/${leftCompareRunId}`, { method: "GET" }),
+        requestJson<AuditRunResponse>(`/api/runs/${rightCompareRunId}`, { method: "GET" }),
+      ]);
+      setLeftCompareRun(left);
+      setRightCompareRun(right);
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : "No se pudo cargar comparacion de corridas");
+    } finally {
+      setLoadingComparison(false);
     }
   }
 
@@ -673,15 +750,29 @@ export function AuditDashboard() {
                   </p>
 
                   <div className="actions">
-                    <button className="primary" onClick={handleRunAudit} disabled={hasPendingWork || !selectedProduct || !hasReadyPromptBank}>
+                    <button className="primary" onClick={() => void handleRunAudit()} disabled={hasPendingWork || !selectedProduct || !hasReadyPromptBank}>
                       {loadingAction === "run" ? "Ejecutando los 50 prompts..." : "Responder 50 prompts"}
                     </button>
+                    {activeRun?.resumable ? (
+                      <button onClick={() => void handleRunAudit(activeRun.runId)} disabled={hasPendingWork || !selectedProduct || !hasReadyPromptBank}>
+                        {loadingAction === "run" ? "Reanudando..." : `Reanudar corrida (${activeRun.completedPrompts ?? activeRun.results.length}/50)`}
+                      </button>
+                    ) : null}
                     {activeRun ? (
                       <a className="download" href={`/api/runs/${activeRun.runId}/excel`}>
                         Descargar Excel
                       </a>
                     ) : null}
                   </div>
+
+                  {activeRun?.status === "failed" ? (
+                    <p className="error-box">
+                      Corrida fallida en etapa <strong>{activeRun.errorStage ?? "unknown"}</strong>
+                      {activeRun.failedPromptId ? ` · Prompt ${activeRun.failedPromptId}` : ""}
+                      {activeRun.failedPromptText ? ` · ${activeRun.failedPromptText}` : ""}
+                      {activeRun.errorMessage ? ` · ${activeRun.errorMessage}` : ""}
+                    </p>
+                  ) : null}
 
                   {!hasReadyPromptBank ? (
                     <p className="empty-state">
@@ -729,6 +820,7 @@ export function AuditDashboard() {
                           >
                             <strong>{formatProviderLabel(run.auditedProvider)}</strong>
                             <span>{formatDate(run.createdAt)}</span>
+                            <span>{run.status}</span>
                           </button>
                         ))}
                       </div>
@@ -789,6 +881,27 @@ export function AuditDashboard() {
                               <p>{result.evidenceSnippet ?? "Sin evidencia destacada"}</p>
                             </div>
                             <div>
+                              <small>Motivos de scoring</small>
+                              <p>{result.scoringReasons?.productHitReason ?? "Sin motivo de product hit"}</p>
+                              <p>{result.scoringReasons?.rankReason ?? "Sin motivo de rank"}</p>
+                              <p>{result.scoringReasons?.vendorHitReason ?? "Sin motivo de vendor hit"}</p>
+                              <p>{result.scoringReasons?.exactUrlReason ?? "Sin motivo de URL"}</p>
+                            </div>
+                            <div>
+                              <small>Clasificacion de alternativas</small>
+                              <pre>
+                                {result.alternativeClassifications?.length
+                                  ? result.alternativeClassifications
+                                      .map((item) => {
+                                        const match = item.matchedSku ? ` · SKU ${item.matchedSku}` : "";
+                                        const brand = item.matchedBrand ? ` · Marca ${item.matchedBrand}` : "";
+                                        return `${item.mention} => ${item.classification} (${item.reason})${match}${brand}`;
+                                      })
+                                      .join("\n")
+                                  : "Sin clasificaciones registradas"}
+                              </pre>
+                            </div>
+                            <div>
                               <small>Respuesta cruda</small>
                               <pre>{result.rawResponse}</pre>
                             </div>
@@ -800,6 +913,86 @@ export function AuditDashboard() {
                         </details>
                       ))}
                     </div>
+                  </article>
+
+                  <article className="card run-table-card">
+                    <div className="card-head">
+                      <span>Comparar corridas</span>
+                      <span>{leftCompareRunId && rightCompareRunId ? "2 seleccionadas" : "sin seleccion"}</span>
+                    </div>
+                    <div className="control-grid">
+                      <div className="field">
+                        <label htmlFor="compareLeft">Corrida A (antes)</label>
+                        <select id="compareLeft" value={leftCompareRunId} onChange={(event) => setLeftCompareRunId(event.target.value)}>
+                          <option value="">Seleccionar run</option>
+                          {productRuns.map((run) => (
+                            <option key={`left-${run.runId}`} value={run.runId}>{`${run.runId.slice(0, 8)} · ${formatDate(run.createdAt)}`}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="field">
+                        <label htmlFor="compareRight">Corrida B (despues)</label>
+                        <select id="compareRight" value={rightCompareRunId} onChange={(event) => setRightCompareRunId(event.target.value)}>
+                          <option value="">Seleccionar run</option>
+                          {productRuns.map((run) => (
+                            <option key={`right-${run.runId}`} value={run.runId}>{`${run.runId.slice(0, 8)} · ${formatDate(run.createdAt)}`}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                    <div className="actions">
+                      <button onClick={() => void handleLoadComparison()} disabled={loadingComparison || !leftCompareRunId || !rightCompareRunId}>
+                        {loadingComparison ? "Comparando..." : "Comparar"}
+                      </button>
+                    </div>
+                    {comparisonSummary ? (
+                      <>
+                        <div className="summary-strip">
+                          {comparisonSummary.map((item) => {
+                            const delta = item.after - item.before;
+                            const beforeLabel = item.percent ? `${Math.round(item.before * 100)}%` : item.before.toFixed(2);
+                            const afterLabel = item.percent ? `${Math.round(item.after * 100)}%` : item.after.toFixed(2);
+                            const deltaLabel = item.percent ? `${delta >= 0 ? "+" : ""}${Math.round(delta * 100)}%` : `${delta >= 0 ? "+" : ""}${delta.toFixed(2)}`;
+                            return (
+                              <div key={item.label} className="summary-pill">
+                                <span>{item.label}</span>
+                                <strong>{`${beforeLabel} -> ${afterLabel}`}</strong>
+                                <small>{deltaLabel}</small>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <p className="stage-copy">Prompts con cambios relevantes: {comparisonPromptDiffs.length}</p>
+                        {comparisonPromptDiffs.length ? (
+                          <div className="result-list">
+                            {comparisonPromptDiffs.slice(0, 20).map((diff) => (
+                              <div key={diff.promptId} className="result-item">
+                                <div className="result-body">
+                                  <div>
+                                    <small>Prompt</small>
+                                    <p>{diff.promptId}</p>
+                                  </div>
+                                  <div>
+                                    <small>Product Hit</small>
+                                    <p>{`${diff.before.productHit} -> ${diff.after.productHit}`}</p>
+                                  </div>
+                                  <div>
+                                    <small>Rank</small>
+                                    <p>{`${diff.before.rank} -> ${diff.after.rank}`}</p>
+                                  </div>
+                                  <div>
+                                    <small>Int / Ext</small>
+                                    <p>{`${diff.before.internalAlternatives}/${diff.before.externalCompetitors} -> ${diff.after.internalAlternatives}/${diff.after.externalCompetitors}`}</p>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : null}
+                      </>
+                    ) : (
+                      <p className="empty-state">Selecciona dos corridas y presiona comparar para ver diferencias.</p>
+                    )}
                   </article>
                 </section>
               ) : null}

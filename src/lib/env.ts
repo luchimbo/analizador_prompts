@@ -14,7 +14,7 @@ const env = {
   openRouterGeneratorModel: process.env.OPENROUTER_GENERATOR_MODEL ?? "google/gemini-2.5-flash",
   openRouterJudgeModel: process.env.OPENROUTER_JUDGE_MODEL ?? "moonshotai/kimi-k2",
   openRouterOpenAiAuditModel: process.env.OPENROUTER_OPENAI_AUDIT_MODEL ?? "openai/gpt-4.1-mini",
-  openRouterGeminiAuditModel: process.env.OPENROUTER_GEMINI_AUDIT_MODEL ?? "google/gemini-2.5-pro",
+  openRouterGeminiAuditModel: process.env.OPENROUTER_GEMINI_AUDIT_MODEL ?? "google/gemini-2.5-flash:online",
   openRouterWebPluginId: process.env.OPENROUTER_WEB_PLUGIN_ID ?? "web",
   openRouterSiteUrl: process.env.OPENROUTER_SITE_URL ?? "",
   openRouterAppName: process.env.OPENROUTER_APP_NAME ?? "ia-product-audit",
