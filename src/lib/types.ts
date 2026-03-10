@@ -97,7 +97,7 @@ export interface AlternativeClassification {
   mention: string;
   normalizedMention: string;
   classification: "internal" | "external" | "ignored";
-  reason: "principal_mention" | "brand_only" | "catalog_match" | "brand_override" | "unmatched";
+  reason: "principal_mention" | "ignored_entity" | "brand_only" | "catalog_match" | "brand_override" | "unmatched" | "unknown_brand";
   matchedSku?: string | null;
   matchedName?: string | null;
   matchedBrand?: string | null;

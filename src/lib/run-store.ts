@@ -1,3 +1,4 @@
+import { normalizeAuditedModel } from "@/lib/audit-models";
 import { getDb } from "@/lib/db";
 import type { AuditRunResponse, PromptAuditResult, ProductProfile, PromptBank, RunListItem, RunSummary, RunStatus } from "@/lib/types";
 
@@ -366,13 +367,14 @@ export async function countRunsByProduct(productId: string): Promise<number> {
 }
 
 function mapRunRow(runRow: Record<string, unknown>, resultRows: Array<Record<string, unknown>>): AuditRunResponse {
+  const auditedProvider = normalizeProvider(asString(runRow.audited_provider));
   return {
     runId: asString(runRow.run_id),
     productId: asNullableString(runRow.product_id),
     status: asString(runRow.status) as RunStatus,
     createdAt: asString(runRow.created_at),
-    auditedProvider: normalizeProvider(asString(runRow.audited_provider)),
-    auditedModel: asString(runRow.audited_model),
+    auditedProvider,
+    auditedModel: normalizeAuditedModel(auditedProvider, asString(runRow.audited_model)) ?? "",
     productProfile: parseJson<ProductProfile>(runRow.product_profile_json, {} as ProductProfile),
     promptBank: parseJson<PromptBank>(runRow.prompt_bank_json, {} as PromptBank),
     results: resultRows.map(mapRunResultRow),
@@ -486,13 +488,14 @@ function mapRunResultRow(row: Record<string, unknown>): PromptAuditResult {
 }
 
 function mapRunListRow(row: Record<string, unknown>): RunListItem {
+  const auditedProvider = normalizeProvider(asString(row.audited_provider));
   return {
     runId: asString(row.run_id),
     productId: asNullableString(row.product_id),
     status: asString(row.status) as RunStatus,
     createdAt: asString(row.created_at),
-    auditedProvider: normalizeProvider(asString(row.audited_provider)),
-    auditedModel: asString(row.audited_model),
+    auditedProvider,
+    auditedModel: normalizeAuditedModel(auditedProvider, asString(row.audited_model)) ?? "",
     productName: asNullableString(row.product_name),
     exportPath: asNullableString(row.export_path),
   };

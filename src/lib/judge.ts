@@ -13,7 +13,8 @@ Rules:
 - Product_Hit is 1 only if the target product is positively recommended.
 - Rank is the positive recommendation position of the target product. Use 0 if absent.
 - Extract alternative product mentions as short product-like strings in alternativeMentions.
-- Ignore generic brand-only mentions in alternativeMentions.
+- Extract explicit alternative brand mentions in brandMentions, including brand-only mentions when they refer to competing or alternative brands.
+- Exclude stores, marketplaces, retailers, and generic product categories from brandMentions.
 - Do not guess missing facts.
 
 JSON schema:
@@ -21,6 +22,7 @@ JSON schema:
   "productHit": 0,
   "rank": 0,
   "alternativeMentions": ["string"],
+  "brandMentions": ["string"],
   "evidenceSnippet": "short quote or null",
   "judgeNotes": "brief note"
 }`;
@@ -29,6 +31,7 @@ interface JudgePayload {
   productHit?: number;
   rank?: number;
   alternativeMentions?: string[];
+  brandMentions?: string[];
   evidenceSnippet?: string | null;
   judgeNotes?: string | null;
 }
@@ -52,9 +55,12 @@ export async function judgeExecution({
   const evidenceSnippet = llmMetrics.evidenceSnippet ?? extractEvidence(profile, execution.rawResponse);
 
   const mentions = uniquePreserveOrder((llmMetrics.alternativeMentions ?? []).map((item) => normalizeWhitespace(item)).filter(Boolean));
+  const brandMentions = uniquePreserveOrder((llmMetrics.brandMentions ?? []).map((item) => normalizeWhitespace(item)).filter(Boolean));
   const alternatives = await classifyAlternativeMentions({
-    mentions,
+    mentions: uniquePreserveOrder([...mentions, ...brandMentions]),
     principalAliases: [profile.productName, ...(profile.aliases ?? [])],
+    ignoredAliases: [profile.storeName ?? "", ...(profile.vendorAliases ?? []), "Mercado Libre", "Musicamia", "TodoMusica", "MasMusica"],
+    responseText: execution.rawResponse,
   });
 
   const vendorHit = productHit ? computeVendorHit(profile, execution.rawResponse) : 0;
@@ -133,6 +139,7 @@ function judgeWithHeuristics(profile: ProductProfile, execution: PromptExecution
     productHit,
     rank: productHit ? estimateRank(execution.rawResponse, aliases) : 0,
     alternativeMentions: estimateAlternativeMentions(execution.rawResponse, aliases),
+    brandMentions: [],
     evidenceSnippet: extractEvidence(profile, execution.rawResponse),
     judgeNotes: "Heuristic judge used because OpenRouter judge was unavailable or invalid.",
   };

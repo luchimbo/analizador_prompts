@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 
+import { normalizeAuditedModel } from "@/lib/audit-models";
 import { env } from "@/lib/env";
 import { defaultAuditedModel, executeAuditPrompt } from "@/lib/audit-runner";
 import { judgeExecution } from "@/lib/judge";
@@ -138,10 +139,10 @@ export function ensureReadyPromptBank(product: SavedProduct): PromptBank {
 
 export function resolveLockedAuditTarget(product: SavedProduct, requestedProvider?: AuditedProvider, requestedModel?: string | null): { auditedProvider: AuditedProvider; auditedModel: string } {
   const requestedAuditedProvider = normalizeAuditedProvider(requestedProvider ?? "openai");
-  const requestedAuditedModel = requestedModel?.trim() || defaultAuditedModel(requestedAuditedProvider);
+  const requestedAuditedModel = normalizeAuditedModel(requestedAuditedProvider, requestedModel?.trim() || defaultAuditedModel(requestedAuditedProvider)) || defaultAuditedModel(requestedAuditedProvider);
 
   const lockedProvider = product.lockedAuditedProvider ? normalizeAuditedProvider(product.lockedAuditedProvider as AuditedProvider) : null;
-  const lockedModel = product.lockedAuditedModel;
+  const lockedModel = normalizeAuditedModel(lockedProvider, product.lockedAuditedModel);
 
   if (!lockedProvider || !lockedModel) {
     return {

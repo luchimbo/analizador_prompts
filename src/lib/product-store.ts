@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 
+import { normalizeAuditedModel } from "@/lib/audit-models";
 import { getDb } from "@/lib/db";
 import { validatePromptBank } from "@/lib/prompt-bank";
 import type { ProductProfile, PromptBank, SavedProduct } from "@/lib/types";
@@ -297,14 +298,15 @@ async function repairInvalidProductIds(): Promise<void> {
 }
 
 function mapProductRow(row: Record<string, unknown>): SavedProduct {
+  const lockedAuditedProvider = normalizeProvider(asNullableString(row.locked_audited_provider));
   return {
     productId: asString(row.product_id),
     createdAt: asString(row.created_at),
     updatedAt: asString(row.updated_at),
     language: asString(row.language),
     market: asString(row.market),
-    lockedAuditedProvider: normalizeProvider(asNullableString(row.locked_audited_provider)),
-    lockedAuditedModel: asNullableString(row.locked_audited_model),
+    lockedAuditedProvider,
+    lockedAuditedModel: normalizeAuditedModel(lockedAuditedProvider, asNullableString(row.locked_audited_model)),
     latestRunId: asNullableString(row.latest_run_id),
     profile: {
       sourceUrl: asString(row.source_url),

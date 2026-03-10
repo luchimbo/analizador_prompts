@@ -32,6 +32,97 @@ export interface ClassifiedAlternatives {
   classifications: AlternativeClassification[];
 }
 
+const GENERIC_BRAND_STOPWORDS = new Set([
+  "accesorio",
+  "accesorios",
+  "activo",
+  "activa",
+  "argentina",
+  "atril",
+  "audio",
+  "basico",
+  "bateria",
+  "black",
+  "bluetooth",
+  "brazo",
+  "busca",
+  "busca",
+  "camara",
+  "canciones",
+  "categoria",
+  "combo",
+  "comparativa",
+  "condensador",
+  "consejos",
+  "controlador",
+  "criolla",
+  "cuotas",
+  "digital",
+  "drum",
+  "economica",
+  "ejemplo",
+  "enlace",
+  "envios",
+  "estudio",
+  "funda",
+  "gama",
+  "gamer",
+  "grabador",
+  "ideal",
+  "interfaz",
+  "kit",
+  "libre",
+  "linea",
+  "lista",
+  "mercado",
+  "microfono",
+  "microfonos",
+  "midi",
+  "mini",
+  "mochila",
+  "modelo",
+  "monitor",
+  "monitores",
+  "mouse",
+  "mousepad",
+  "musical",
+  "musicamia",
+  "notas",
+  "nuevo",
+  "nvo",
+  "opciones",
+  "organo",
+  "pack",
+  "parlante",
+  "parlantes",
+  "pedal",
+  "piano",
+  "pie",
+  "placa",
+  "precio",
+  "precios",
+  "principiante",
+  "pro",
+  "recomendada",
+  "recomendado",
+  "reproducir",
+  "sampler",
+  "secuenciador",
+  "sentitivo",
+  "shop",
+  "soporte",
+  "song",
+  "store",
+  "teclado",
+  "teclados",
+  "tienda",
+  "tiendas",
+  "todomusica",
+  "usb",
+  "verifica",
+  "white",
+]);
+
 let cache: { loadedAt: number; rows: CatalogRow[] } | null = null;
 let overrideCache: { loadedAt: number; rows: BrandOverrideRow[] } | null = null;
 const CACHE_TTL_MS = 5 * 60 * 1000;
@@ -39,21 +130,41 @@ const CACHE_TTL_MS = 5 * 60 * 1000;
 export async function classifyAlternativeMentions({
   mentions,
   principalAliases,
+  ignoredAliases = [],
+  responseText,
 }: {
   mentions: string[];
   principalAliases: string[];
+  ignoredAliases?: string[];
+  responseText?: string;
 }): Promise<ClassifiedAlternatives> {
   const catalog = await getCatalogRows();
   const principalSet = new Set(principalAliases.map((alias) => normalize(alias)).filter(Boolean));
+  const ignoredSet = new Set(ignoredAliases.map((alias) => normalize(alias)).filter(Boolean));
   const brandRules = await getBrandOverrides();
+  const knownBrandMap = buildKnownBrandMap(catalog, brandRules);
   const brandRuleMap = new Map(brandRules.map((rule) => [rule.brand, rule.classification]));
+  const mentionInputs = uniquePreserveOrder([
+    ...mentions,
+    ...(responseText ? extractBrandCandidatesFromResponse(responseText, knownBrandMap, principalSet, ignoredSet) : []),
+  ]);
   const seenInternal = new Set<string>();
   const classifications: AlternativeClassification[] = [];
   let external = 0;
 
-  for (const mentionRaw of mentions) {
+  for (const mentionRaw of mentionInputs) {
     const mention = normalize(mentionRaw);
     if (!mention) {
+      continue;
+    }
+
+    if (isIgnoredEntityMention(mention, ignoredSet)) {
+      classifications.push({
+        mention: mentionRaw,
+        normalizedMention: mention,
+        classification: "ignored",
+        reason: "ignored_entity",
+      });
       continue;
     }
 
@@ -68,12 +179,18 @@ export async function classifyAlternativeMentions({
     }
 
     if (tokenize(mention).length === 1) {
-      classifications.push({
-        mention: mentionRaw,
-        normalizedMention: mention,
-        classification: "ignored",
-        reason: "brand_only",
+      const singleTokenClassification = classifySingleTokenMention({
+        mentionRaw,
+        mention,
+        knownBrandMap,
+        brandRuleMap,
+        principalSet,
+        ignoredSet,
       });
+      classifications.push(singleTokenClassification.classification);
+      if (singleTokenClassification.isExternal) {
+        external += 1;
+      }
       continue;
     }
 
@@ -208,8 +325,9 @@ export async function reclassifyHistoricalRunResults(): Promise<{ updated: numbe
       continue;
     }
 
-    const profile = parseJson<{ productName?: string; aliases?: string[] }>(row.product_profile_json, {});
+    const profile = parseJson<{ productName?: string; aliases?: string[]; storeName?: string; vendorAliases?: string[] }>(row.product_profile_json, {});
     const principalAliases = [profile.productName ?? "", ...(Array.isArray(profile.aliases) ? profile.aliases : [])].filter(Boolean);
+    const ignoredAliases = [profile.storeName ?? "", ...(Array.isArray(profile.vendorAliases) ? profile.vendorAliases : []), "Mercado Libre", "Musicamia", "TodoMusica", "MasMusica"].filter(Boolean);
 
     const parsedMentions = parseJson<string[]>(row.alternative_mentions_json, [])
       .map((item) => normalizeWhitespace(item))
@@ -219,6 +337,8 @@ export async function reclassifyHistoricalRunResults(): Promise<{ updated: numbe
     const alternatives = await classifyAlternativeMentions({
       mentions,
       principalAliases,
+      ignoredAliases,
+      responseText: String(row.raw_response ?? ""),
     });
 
     const productCompetitors = alternatives.internalAlternatives + alternatives.externalCompetitors;
@@ -295,6 +415,137 @@ async function getBrandOverrides(): Promise<BrandOverrideRow[]> {
   return rows;
 }
 
+function buildKnownBrandMap(catalog: CatalogRow[], overrides: BrandOverrideRow[]): Map<string, string> {
+  const brands = new Map<string, string>();
+
+  for (const row of catalog) {
+    const normalizedBrand = normalize(row.brand ?? "");
+    if (!normalizedBrand || brands.has(normalizedBrand)) {
+      continue;
+    }
+    brands.set(normalizedBrand, row.brand ?? normalizedBrand);
+  }
+
+  for (const override of overrides) {
+    if (!override.brand || brands.has(override.brand)) {
+      continue;
+    }
+    brands.set(override.brand, override.brand);
+  }
+
+  return brands;
+}
+
+function extractBrandCandidatesFromResponse(
+  responseText: string,
+  knownBrandMap: Map<string, string>,
+  principalSet: Set<string>,
+  ignoredSet: Set<string>,
+): string[] {
+  const candidates: string[] = [];
+  const segments = collectCandidateSegments(responseText);
+
+  for (const segment of segments) {
+    const normalizedSegment = normalize(segment);
+    if (!normalizedSegment) {
+      continue;
+    }
+
+    for (const [normalizedBrand, displayBrand] of knownBrandMap.entries()) {
+      if (containsPhrase(normalizedSegment, normalizedBrand) && !isPrincipalMention(normalizedBrand, principalSet) && !isIgnoredEntityMention(normalizedBrand, ignoredSet)) {
+        candidates.push(displayBrand);
+      }
+    }
+
+    const rawTokens = segment.split(/\s+/).map(stripOuterPunctuation).filter(Boolean);
+    for (let index = 0; index < rawTokens.length - 1; index += 1) {
+      const current = rawTokens[index];
+      const next = rawTokens[index + 1];
+      if (!current || !next) {
+        continue;
+      }
+
+      const normalizedCurrent = normalize(current);
+      if (!normalizedCurrent || knownBrandMap.has(normalizedCurrent) || isPrincipalMention(normalizedCurrent, principalSet) || isIgnoredEntityMention(normalizedCurrent, ignoredSet)) {
+        continue;
+      }
+      if (!hasUppercase(current) || !looksLikeModelToken(next) || GENERIC_BRAND_STOPWORDS.has(normalizedCurrent)) {
+        continue;
+      }
+      candidates.push(current);
+    }
+  }
+
+  return uniquePreserveOrder(candidates);
+}
+
+function classifySingleTokenMention({
+  mentionRaw,
+  mention,
+  knownBrandMap,
+  brandRuleMap,
+  principalSet,
+  ignoredSet,
+}: {
+  mentionRaw: string;
+  mention: string;
+  knownBrandMap: Map<string, string>;
+  brandRuleMap: Map<string, BrandClassification>;
+  principalSet: Set<string>;
+  ignoredSet: Set<string>;
+}): { classification: AlternativeClassification; isExternal: boolean } {
+  const knownBrand = knownBrandMap.get(mention);
+  if (knownBrand) {
+    const classification = brandRuleMap.get(mention) ?? "internal";
+    if (classification === "external") {
+      return {
+        classification: {
+          mention: mentionRaw,
+          normalizedMention: mention,
+          classification: "external",
+          reason: "brand_override",
+          matchedBrand: knownBrand,
+        },
+        isExternal: true,
+      };
+    }
+
+    return {
+      classification: {
+        mention: mentionRaw,
+        normalizedMention: mention,
+        classification: "ignored",
+        reason: "brand_only",
+        matchedBrand: knownBrand,
+      },
+      isExternal: false,
+    };
+  }
+
+  if (isLikelyUnknownBrandMention(mentionRaw, mention, principalSet, ignoredSet)) {
+    return {
+      classification: {
+        mention: mentionRaw,
+        normalizedMention: mention,
+        classification: "external",
+        reason: "unknown_brand",
+        matchedBrand: mentionRaw,
+      },
+      isExternal: true,
+    };
+  }
+
+  return {
+    classification: {
+      mention: mentionRaw,
+      normalizedMention: mention,
+      classification: "ignored",
+      reason: "brand_only",
+    },
+    isExternal: false,
+  };
+}
+
 function findCatalogMatch(mention: string, catalog: CatalogRow[]): CatalogRow | null {
   const mentionTokens = tokenize(mention);
   if (!mentionTokens.length) {
@@ -350,6 +601,18 @@ function isPrincipalMention(mention: string, principalSet: Set<string>): boolean
   return false;
 }
 
+function isIgnoredEntityMention(mention: string, ignoredSet: Set<string>): boolean {
+  for (const ignored of ignoredSet) {
+    if (!ignored) {
+      continue;
+    }
+    if (mention === ignored || mention.includes(ignored) || ignored.includes(mention)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function parseTokens(value: string): string[] {
   try {
     const parsed = JSON.parse(value) as string[];
@@ -397,6 +660,65 @@ function expandMatchTokens(tokens: string[]): Set<string> {
 
 function compact(value: string): string {
   return normalize(value).replace(/\s+/g, "");
+}
+
+function containsPhrase(haystack: string, needle: string): boolean {
+  return Boolean(haystack && needle && ` ${haystack} `.includes(` ${needle} `));
+}
+
+function collectCandidateSegments(responseText: string): string[] {
+  const segments: string[] = [];
+
+  for (const line of responseText.split(/\r?\n/)) {
+    const cleaned = normalizeWhitespace(line);
+    if (!cleaned) {
+      continue;
+    }
+    const listText = line.match(LIST_PATTERN)?.groups?.text;
+    segments.push(normalizeWhitespace(listText ?? cleaned));
+  }
+
+  for (const sentence of responseText.split(/(?<=[.!?])\s+/)) {
+    const cleaned = normalizeWhitespace(sentence);
+    if (!cleaned) {
+      continue;
+    }
+    segments.push(cleaned);
+  }
+
+  return uniquePreserveOrder(segments);
+}
+
+function stripOuterPunctuation(value: string): string {
+  return value.replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9]+$/g, "");
+}
+
+function hasUppercase(value: string): boolean {
+  return /[A-ZÁÉÍÓÚÑ]/.test(value);
+}
+
+function looksLikeModelToken(value: string): boolean {
+  const cleaned = stripOuterPunctuation(value);
+  if (!cleaned) {
+    return false;
+  }
+  return /\d/.test(cleaned) || /^[A-Z0-9-]{2,}$/i.test(cleaned);
+}
+
+function isLikelyUnknownBrandMention(mentionRaw: string, mention: string, principalSet: Set<string>, ignoredSet: Set<string>): boolean {
+  if (!mention || mention.length < 3) {
+    return false;
+  }
+  if (GENERIC_BRAND_STOPWORDS.has(mention)) {
+    return false;
+  }
+  if (isPrincipalMention(mention, principalSet) || isIgnoredEntityMention(mention, ignoredSet)) {
+    return false;
+  }
+  if (/^\d+$/.test(mention)) {
+    return false;
+  }
+  return hasUppercase(mentionRaw);
 }
 
 function parseJson<T>(value: unknown, fallback: T): T {
