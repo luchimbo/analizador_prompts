@@ -15,6 +15,8 @@ type LoadingAction = "boot" | "add-product" | "select-product" | "prompts" | "ru
 
 const LOCKED_LANGUAGE = "es";
 const LOCKED_MARKET = "Argentina";
+const GEMINI_DEFAULT_MODEL = "google/gemini-2.5-flash:online";
+const LEGACY_GEMINI_MODELS = new Set(["google/gemini-2.5-pro", "google/gemini-2.5-pro:online"]);
 
 interface HealthConfig {
   defaultOpenAiModel?: string;
@@ -202,19 +204,28 @@ export function AuditDashboard() {
       const health = await requestJson<HealthConfig>("/api/health", { method: "GET" });
       const mappedDefaults: Record<ProviderValue, string> = {
         openai: health.defaultOpenAiModel ?? "",
-        gemini: health.defaultGeminiModel ?? "",
+        gemini: normalizeDisplayedModel("gemini", health.defaultGeminiModel ?? GEMINI_DEFAULT_MODEL),
         custom: "",
       };
       setDefaultModels(mappedDefaults);
 
-      if (!auditedModel) {
+      const normalizedCurrentModel = normalizeDisplayedModel(auditedProvider, auditedModel, mappedDefaults);
+      if (normalizedCurrentModel !== auditedModel) {
+        setAuditedModel(normalizedCurrentModel);
+      } else if (!auditedModel) {
         const initial = mappedDefaults[auditedProvider];
         if (initial) {
           setAuditedModel(initial);
         }
       }
     } catch {
-      // Keep local fallback behavior when health endpoint is unavailable.
+      setDefaultModels((current) => ({
+        ...current,
+        gemini: normalizeDisplayedModel("gemini", current.gemini || GEMINI_DEFAULT_MODEL),
+      }));
+      if (auditedProvider === "gemini" && (!auditedModel || LEGACY_GEMINI_MODELS.has(auditedModel))) {
+        setAuditedModel(GEMINI_DEFAULT_MODEL);
+      }
     }
   }
 
@@ -304,10 +315,11 @@ export function AuditDashboard() {
 
       setSelectedProductId(productId);
       setSelectedProduct(product);
+      const nextProvider = product.lockedAuditedProvider ? (normalizeProvider(product.lockedAuditedProvider) as ProviderValue) : auditedProvider;
       if (product.lockedAuditedProvider) {
-        setAuditedProvider(normalizeProvider(product.lockedAuditedProvider) as ProviderValue);
+        setAuditedProvider(nextProvider);
       }
-      setAuditedModel(product.lockedAuditedModel ?? "");
+      setAuditedModel(normalizeDisplayedModel(nextProvider, product.lockedAuditedModel ?? "", defaultModels));
       setShowPrompts(Boolean(product.promptBank));
       setProductRuns(runs);
       setRunProgress(null);
@@ -1091,6 +1103,18 @@ function normalizeProvider(provider: string | null | undefined): string {
     return provider;
   }
   return "custom";
+}
+
+function normalizeDisplayedModel(
+  provider: string | null | undefined,
+  model: string | null | undefined,
+  defaults?: Partial<Record<ProviderValue, string>>,
+): string {
+  const trimmed = model?.trim() ?? "";
+  if (normalizeProvider(provider) === "gemini" && (!trimmed || LEGACY_GEMINI_MODELS.has(trimmed))) {
+    return defaults?.gemini || GEMINI_DEFAULT_MODEL;
+  }
+  return trimmed;
 }
 
 function formatProviderLabel(provider: string | null | undefined): string {
