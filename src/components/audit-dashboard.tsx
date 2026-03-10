@@ -16,6 +16,12 @@ type LoadingAction = "boot" | "add-product" | "select-product" | "prompts" | "ru
 const LOCKED_LANGUAGE = "es";
 const LOCKED_MARKET = "Argentina";
 
+interface HealthConfig {
+  defaultOpenAiModel?: string;
+  defaultGeminiModel?: string;
+  defaultKimiModel?: string;
+}
+
 export function AuditDashboard() {
   const [productUrl, setProductUrl] = useState("");
   const [products, setProducts] = useState<ProductListItem[]>([]);
@@ -33,6 +39,11 @@ export function AuditDashboard() {
   const [savingPromptId, setSavingPromptId] = useState<string | null>(null);
   const [runProgress, setRunProgress] = useState<{ current: number; total: number; promptId?: string; promptText?: string } | null>(null);
   const [streamedResults, setStreamedResults] = useState<PromptAuditResult[]>([]);
+  const [defaultModels, setDefaultModels] = useState<Record<ProviderValue, string>>({
+    openai: "",
+    gemini: "",
+    kimi: "",
+  });
 
   const hasPendingWork = loadingAction !== null || Boolean(savingPromptId);
   const lockedAuditTarget = selectedProduct?.lockedAuditedProvider && selectedProduct?.lockedAuditedModel
@@ -50,7 +61,18 @@ export function AuditDashboard() {
 
   useEffect(() => {
     void loadProducts();
+    void loadHealthDefaults();
   }, []);
+
+  useEffect(() => {
+    if (lockedAuditTarget) {
+      return;
+    }
+    const nextDefaultModel = defaultModels[auditedProvider];
+    if (nextDefaultModel) {
+      setAuditedModel(nextDefaultModel);
+    }
+  }, [auditedProvider, defaultModels, lockedAuditTarget]);
 
   const summaryCards = useMemo(() => {
     if (!activeRun?.summary) {
@@ -82,6 +104,27 @@ export function AuditDashboard() {
       throw new Error(data.error ?? "Request failed");
     }
     return data;
+  }
+
+  async function loadHealthDefaults() {
+    try {
+      const health = await requestJson<HealthConfig>("/api/health", { method: "GET" });
+      const mappedDefaults: Record<ProviderValue, string> = {
+        openai: health.defaultOpenAiModel ?? "",
+        gemini: health.defaultGeminiModel ?? "",
+        kimi: health.defaultKimiModel ?? "",
+      };
+      setDefaultModels(mappedDefaults);
+
+      if (!auditedModel) {
+        const initial = mappedDefaults[auditedProvider];
+        if (initial) {
+          setAuditedModel(initial);
+        }
+      }
+    } catch {
+      // Keep local fallback behavior when health endpoint is unavailable.
+    }
   }
 
   async function loadProducts(preferredProductId?: string) {
@@ -584,16 +627,20 @@ export function AuditDashboard() {
                       </select>
                     </div>
                     <div className="field">
-                      <label htmlFor="auditedModel">Slug opcional</label>
+                      <label htmlFor="auditedModel">Modelo (slug)</label>
                       <input
                         id="auditedModel"
-                        placeholder="openai/gpt-4.1-mini"
+                        placeholder={defaultModels[auditedProvider] || "openai/gpt-4.1-mini"}
                         value={auditedModel}
                         onChange={(event) => setAuditedModel(event.target.value)}
                         disabled={Boolean(lockedAuditTarget)}
                       />
                     </div>
                   </div>
+
+                  <p className="stage-copy">
+                    Modelo por defecto para {auditedProvider}: <strong>{defaultModels[auditedProvider] || "(sin configurar)"}</strong>
+                  </p>
 
                   <div className="actions">
                     <button className="primary" onClick={handleRunAudit} disabled={hasPendingWork || !selectedProduct || !hasReadyPromptBank}>
