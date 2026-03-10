@@ -42,6 +42,19 @@ const BRAND_ALIASES = [
   ["meike", ["meike"]],
   ["korg", ["korg"]],
   ["novation", ["novation"]],
+  ["alctron", ["alctron"]],
+  ["synido", ["synido"]],
+  ["tascam", ["tascam"]],
+  ["spartan", ["spartan"]],
+  ["ausek", ["ausek"]],
+  ["benson", ["benson"]],
+  ["kirlin", ["kirlin"]],
+  ["kolt", ["kolt"]],
+  ["mackie", ["mackie"]],
+  ["warwick", ["warwick"]],
+  ["tahorng", ["tahorng"]],
+  ["lexsen", ["lexsen"]],
+  ["adam hall", ["adam hall"]],
   ["akai", ["akai", "akai professional"]],
   ["behringer", ["behringer"]],
   ["m-audio", ["m-audio", "maudio"]],
@@ -61,52 +74,23 @@ const BRAND_ALIASES = [
   ["krk", ["krk"]],
 ];
 
-const GENERIC_TOKENS = new Set([
-  "auriculares",
-  "auricular",
-  "teclado",
-  "teclados",
-  "controlador",
-  "midi",
-  "musical",
-  "microfono",
-  "microfonos",
-  "monitor",
-  "monitores",
-  "parlante",
-  "parlantes",
-  "interfaz",
-  "interface",
-  "cable",
-  "pedal",
-  "guitarra",
-  "bajo",
-  "bateria",
-  "drum",
-  "audio",
-  "usb",
-  "linea",
-  "activo",
-  "activa",
-  "combo",
-  "kit",
-  "pack",
-  "nvo",
-  "nuevo",
-  "black",
-  "white",
-  "pro",
-  "mini",
-]);
+const PROVIDER_ALIASES = [
+  ["midiplus", ["midiplus china", "midiplus taiwan"]],
+  ["meike", ["meike dfun"]],
+  ["alctron", ["alctron electronics technology co", "alctron"]],
+  ["arturia", ["arturia"]],
+  ["synido", ["synido"]],
+  ["enping", ["enping"]],
+];
 
-function inferBrand(name) {
-  const normalized = normalizeText(name);
+function findCanonicalBrand(text, dictionary) {
+  const normalized = normalizeText(text);
   if (!normalized) {
     return null;
   }
 
   let bestMatch = null;
-  for (const [brand, aliases] of BRAND_ALIASES) {
+  for (const [brand, aliases] of dictionary) {
     for (const alias of aliases) {
       const normalizedAlias = normalizeText(alias);
       if (!normalizedAlias) continue;
@@ -119,15 +103,18 @@ function inferBrand(name) {
     }
   }
 
-  if (bestMatch) {
-    return bestMatch.brand;
+  return bestMatch?.brand ?? null;
+}
+
+function inferBrand(name, provider) {
+  const fromName = findCanonicalBrand(name, BRAND_ALIASES);
+  if (fromName) {
+    return fromName;
   }
 
-  const tokens = normalized.split(" ").filter(Boolean);
-  for (const token of tokens.slice(0, 3)) {
-    if (token.length < 3) continue;
-    if (GENERIC_TOKENS.has(token)) continue;
-    return token;
+  const fromProvider = findCanonicalBrand(provider, PROVIDER_ALIASES);
+  if (fromProvider) {
+    return fromProvider;
   }
 
   return null;
@@ -135,6 +122,9 @@ function inferBrand(name) {
 
 function buildFamilyTokens(name) {
   const normalized = normalizeText(name);
+  if (!normalized) {
+    return [];
+  }
   const tokens = normalized.split(" ").filter(Boolean);
   if (!tokens.length) {
     return [];
@@ -197,12 +187,13 @@ async function main() {
   for (const row of rows) {
     const sku = String(row.SKU || "").trim();
     const name = String(row.Nombre || "").trim();
+    const provider = String(row.Proveedor || "").trim();
     if (!sku || !name) {
       continue;
     }
 
     const normalizedName = normalizeText(name);
-    const brand = inferBrand(name);
+    const brand = inferBrand(name, provider);
     const familyTokens = buildFamilyTokens(name);
 
     await client.execute({
