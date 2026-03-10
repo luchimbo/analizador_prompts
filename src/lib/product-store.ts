@@ -42,7 +42,7 @@ export async function upsertProductRecord({
   const targetSource = normalizeUrl(profile.sourceUrl);
 
   const existingResult = await db.execute({
-    sql: `SELECT product_id, created_at, latest_run_id, prompt_bank_json FROM products WHERE canonical_url = ? OR source_url = ? LIMIT 1`,
+    sql: `SELECT product_id, created_at, latest_run_id, locked_audited_provider, locked_audited_model, prompt_bank_json FROM products WHERE canonical_url = ? OR source_url = ? LIMIT 1`,
     args: [targetCanonical, targetSource],
   });
   const existing = existingResult.rows[0];
@@ -52,15 +52,18 @@ export async function upsertProductRecord({
   const productId = asNonEmptyString(existing?.product_id) ?? randomUUID();
   const createdAt = asNonEmptyString(existing?.created_at) ?? timestamp;
   const latestRunId = asNullableString(existing?.latest_run_id);
+  const lockedAuditedProvider = asNullableString(existing?.locked_audited_provider);
+  const lockedAuditedModel = asNullableString(existing?.locked_audited_model);
 
   await db.execute({
     sql: `
       INSERT OR REPLACE INTO products (
         product_id, created_at, updated_at, language, market, latest_run_id,
+        locked_audited_provider, locked_audited_model,
         source_url, canonical_url, domain, product_name, brand_name, store_name,
         category, page_title, meta_description, aliases_json, vendor_aliases_json,
         competitor_names_json, extraction_notes_json, prompt_bank_json
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     args: [
       productId,
@@ -69,6 +72,8 @@ export async function upsertProductRecord({
       language,
       market,
       latestRunId,
+      lockedAuditedProvider,
+      lockedAuditedModel,
       targetSource,
       targetCanonical,
       profile.domain,
@@ -167,6 +172,25 @@ export async function updateProductLatestRun(productId: string, latestRunId: str
   return saved;
 }
 
+export async function updateProductAuditLock(productId: string, auditedProvider: string, auditedModel: string): Promise<SavedProduct> {
+  await ensureProductDataHealth();
+  const db = await getDb();
+  const result = await db.execute({
+    sql: `UPDATE products SET updated_at = ?, locked_audited_provider = ?, locked_audited_model = ? WHERE product_id = ?`,
+    args: [new Date().toISOString(), auditedProvider, auditedModel, productId],
+  });
+
+  if (Number(result.rowsAffected) === 0) {
+    throw new Error("Product not found");
+  }
+
+  const saved = await getProductRecord(productId);
+  if (!saved) {
+    throw new Error("Product not found");
+  }
+  return saved;
+}
+
 async function ensureProductDataHealth(): Promise<void> {
   if (!globalThis.__iaProductAuditProductRepairPromise__) {
     globalThis.__iaProductAuditProductRepairPromise__ = repairInvalidProductIds();
@@ -203,6 +227,39 @@ async function repairInvalidProductIds(): Promise<void> {
   }
 
   await db.execute(`UPDATE products SET created_at = updated_at WHERE created_at IS NULL OR TRIM(created_at) = ''`);
+
+  const unlockedProducts = await db.execute(`
+    SELECT p.product_id, first_run.audited_provider, first_run.audited_model
+    FROM products p
+    JOIN (
+      SELECT r.product_id, r.audited_provider, r.audited_model
+      FROM runs r
+      JOIN (
+        SELECT product_id, MIN(created_at) AS first_created_at
+        FROM runs
+        WHERE product_id IS NOT NULL
+        GROUP BY product_id
+      ) firsts
+      ON r.product_id = firsts.product_id AND r.created_at = firsts.first_created_at
+    ) first_run
+    ON p.product_id = first_run.product_id
+    WHERE (p.locked_audited_provider IS NULL OR TRIM(p.locked_audited_provider) = '')
+      AND (p.locked_audited_model IS NULL OR TRIM(p.locked_audited_model) = '')
+  `);
+
+  for (const row of unlockedProducts.rows) {
+    const productId = asNonEmptyString(row.product_id);
+    const auditedProvider = asNonEmptyString(row.audited_provider);
+    const auditedModel = asNonEmptyString(row.audited_model);
+    if (!productId || !auditedProvider || !auditedModel) {
+      continue;
+    }
+
+    await db.execute({
+      sql: `UPDATE products SET locked_audited_provider = ?, locked_audited_model = ? WHERE product_id = ?`,
+      args: [auditedProvider, auditedModel, productId],
+    });
+  }
 }
 
 function mapProductRow(row: Record<string, unknown>): SavedProduct {
@@ -212,6 +269,8 @@ function mapProductRow(row: Record<string, unknown>): SavedProduct {
     updatedAt: asString(row.updated_at),
     language: asString(row.language),
     market: asString(row.market),
+    lockedAuditedProvider: asNullableString(row.locked_audited_provider),
+    lockedAuditedModel: asNullableString(row.locked_audited_model),
     latestRunId: asNullableString(row.latest_run_id),
     profile: {
       sourceUrl: asString(row.source_url),

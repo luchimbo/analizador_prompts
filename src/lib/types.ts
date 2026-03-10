@@ -136,6 +136,8 @@ export interface SavedProduct {
   updatedAt: string;
   language: string;
   market: string;
+  lockedAuditedProvider?: string | null;
+  lockedAuditedModel?: string | null;
   profile: ProductProfile;
   promptBank?: PromptBank | null;
   latestRunId?: string | null;
@@ -154,6 +156,8 @@ export interface ProductListItem {
   promptCount: number;
   runCount: number;
   latestRunId?: string | null;
+  lockedAuditedProvider?: string | null;
+  lockedAuditedModel?: string | null;
 }
 
 export interface CreateProductRequest {

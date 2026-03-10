@@ -225,6 +225,20 @@ label,
   color: var(--ink);
 }
 
+.locked-audit-note {
+  margin: 0 0 1rem;
+  padding: 0.9rem 1rem;
+  border-radius: 18px;
+  border: 1px solid rgba(23, 19, 16, 0.08);
+  background: rgba(255, 255, 255, 0.56);
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.locked-audit-note strong {
+  color: var(--ink);
+}
+
 .actions {
   display: flex;
   flex-wrap: wrap;

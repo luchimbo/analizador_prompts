@@ -35,6 +35,12 @@ export function AuditDashboard() {
   const [streamedResults, setStreamedResults] = useState<PromptAuditResult[]>([]);
 
   const hasPendingWork = loadingAction !== null || Boolean(savingPromptId);
+  const lockedAuditTarget = selectedProduct?.lockedAuditedProvider && selectedProduct?.lockedAuditedModel
+    ? {
+        provider: selectedProduct.lockedAuditedProvider,
+        model: selectedProduct.lockedAuditedModel,
+      }
+    : null;
   const hasReadyPromptBank =
     selectedProduct?.promptBank?.prompts.length === 50 &&
     selectedProduct.promptBank.language === LOCKED_LANGUAGE &&
@@ -117,6 +123,10 @@ export function AuditDashboard() {
 
       setSelectedProductId(productId);
       setSelectedProduct(product);
+      if (product.lockedAuditedProvider) {
+        setAuditedProvider(product.lockedAuditedProvider as ProviderValue);
+      }
+      setAuditedModel(product.lockedAuditedModel ?? "");
       setShowPrompts(Boolean(product.promptBank));
       setProductRuns(runs);
       setEditingPromptId(null);
@@ -511,10 +521,25 @@ export function AuditDashboard() {
                     Elegi que motor va a responder los 50 prompts del producto seleccionado. Todas las corridas salen fijas para Argentina y quedan disponibles para revisar y descargar.
                   </p>
 
+                  {lockedAuditTarget ? (
+                    <p className="locked-audit-note">
+                      IA bloqueada para este producto: <strong>{lockedAuditTarget.provider}</strong> · <strong>{lockedAuditTarget.model}</strong>
+                    </p>
+                  ) : (
+                    <p className="locked-audit-note">
+                      La primera corrida que hagas va a bloquear este producto a la IA elegida para mantener la comparacion antes/despues.
+                    </p>
+                  )}
+
                   <div className="control-grid">
                     <div className="field">
                       <label htmlFor="provider">IA auditada</label>
-                      <select id="provider" value={auditedProvider} onChange={(event) => setAuditedProvider(event.target.value as ProviderValue)}>
+                      <select
+                        id="provider"
+                        value={auditedProvider}
+                        onChange={(event) => setAuditedProvider(event.target.value as ProviderValue)}
+                        disabled={Boolean(lockedAuditTarget)}
+                      >
                         {providers.map((provider) => (
                           <option key={provider.value} value={provider.value}>
                             {provider.label}
@@ -529,6 +554,7 @@ export function AuditDashboard() {
                         placeholder="openai/gpt-4.1-mini"
                         value={auditedModel}
                         onChange={(event) => setAuditedModel(event.target.value)}
+                        disabled={Boolean(lockedAuditTarget)}
                       />
                     </div>
                   </div>

@@ -42,6 +42,8 @@ export async function ensureDatabaseSchema(): Promise<void> {
             language TEXT NOT NULL,
             market TEXT NOT NULL,
             latest_run_id TEXT,
+            locked_audited_provider TEXT,
+            locked_audited_model TEXT,
             source_url TEXT NOT NULL,
             canonical_url TEXT NOT NULL,
             domain TEXT NOT NULL,
@@ -117,6 +119,8 @@ export async function ensureDatabaseSchema(): Promise<void> {
       )
       .then(async () => {
         await ensureColumn("run_results", "request_id", `ALTER TABLE run_results ADD COLUMN request_id TEXT`);
+        await ensureColumn("products", "locked_audited_provider", `ALTER TABLE products ADD COLUMN locked_audited_provider TEXT`);
+        await ensureColumn("products", "locked_audited_model", `ALTER TABLE products ADD COLUMN locked_audited_model TEXT`);
         await client.execute(`CREATE INDEX IF NOT EXISTS idx_run_results_request_id ON run_results(request_id)`);
       })
       .then(() => undefined);

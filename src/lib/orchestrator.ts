@@ -5,7 +5,7 @@ import { defaultAuditedModel, executeAuditPrompt } from "@/lib/audit-runner";
 import { judgeExecution } from "@/lib/judge";
 import { buildProductProfile } from "@/lib/product-profiler";
 import { generatePromptBank } from "@/lib/prompt-bank";
-import { getProductRecord, listProductRecords, updateProductLatestRun, updateProductPrompt, updateProductPromptBank, upsertProductRecord } from "@/lib/product-store";
+import { getProductRecord, listProductRecords, updateProductAuditLock, updateProductLatestRun, updateProductPrompt, updateProductPromptBank, upsertProductRecord } from "@/lib/product-store";
 import { appendRunResult, countRunsByProduct, createRunRecord, finalizeRunRecord, getRun, listRuns, listRunsByProduct } from "@/lib/run-store";
 import type {
   AuditRunRequest,
@@ -77,6 +77,8 @@ export async function listProducts(): Promise<ProductListItem[]> {
       promptCount: product.promptBank?.prompts.length ?? 0,
       runCount: await countRunsByProduct(product.productId),
       latestRunId: product.latestRunId ?? null,
+      lockedAuditedProvider: product.lockedAuditedProvider ?? null,
+      lockedAuditedModel: product.lockedAuditedModel ?? null,
     })),
   );
 }
@@ -115,6 +117,29 @@ export function ensureReadyPromptBank(product: SavedProduct): PromptBank {
   return product.promptBank;
 }
 
+export function resolveLockedAuditTarget(product: SavedProduct, requestedProvider?: AuditedProvider, requestedModel?: string | null): { auditedProvider: AuditedProvider; auditedModel: string } {
+  const requestedAuditedProvider = requestedProvider ?? "openai";
+  const requestedAuditedModel = requestedModel?.trim() || defaultAuditedModel(requestedAuditedProvider);
+
+  if (!product.lockedAuditedProvider || !product.lockedAuditedModel) {
+    return {
+      auditedProvider: requestedAuditedProvider,
+      auditedModel: requestedAuditedModel,
+    };
+  }
+
+  if (product.lockedAuditedProvider !== requestedAuditedProvider || product.lockedAuditedModel !== requestedAuditedModel) {
+    throw new Error(
+      `Este producto ya quedo bloqueado a ${product.lockedAuditedProvider} / ${product.lockedAuditedModel}. Para comparar antes y despues tenes que usar siempre esa misma IA.`,
+    );
+  }
+
+  return {
+    auditedProvider: product.lockedAuditedProvider as AuditedProvider,
+    auditedModel: product.lockedAuditedModel,
+  };
+}
+
 export async function runProductAudit(productId: string, request: ProductRunRequest): Promise<AuditRunResponse> {
   const product = await getProductRecord(productId);
   if (!product) {
@@ -123,9 +148,12 @@ export async function runProductAudit(productId: string, request: ProductRunRequ
 
   const language = LOCKED_LANGUAGE;
   const market = LOCKED_MARKET;
-  const auditedProvider = request.auditedProvider ?? "openai";
-  const auditedModel = request.auditedModel ?? defaultAuditedModel(auditedProvider);
+  const { auditedProvider, auditedModel } = resolveLockedAuditTarget(product, request.auditedProvider, request.auditedModel);
   const promptBank = ensureReadyPromptBank(product);
+
+  if (!product.lockedAuditedProvider || !product.lockedAuditedModel) {
+    await updateProductAuditLock(productId, auditedProvider, auditedModel);
+  }
 
   const run = await executeAuditFlow({
     productId,
@@ -162,9 +190,12 @@ export async function runProductAuditWithProgress(
 
   const language = LOCKED_LANGUAGE;
   const market = LOCKED_MARKET;
-  const auditedProvider = request.auditedProvider ?? "openai";
-  const auditedModel = request.auditedModel ?? defaultAuditedModel(auditedProvider);
+  const { auditedProvider, auditedModel } = resolveLockedAuditTarget(product, request.auditedProvider, request.auditedModel);
   const promptBank = ensureReadyPromptBank(product);
+
+  if (!product.lockedAuditedProvider || !product.lockedAuditedModel) {
+    await updateProductAuditLock(productId, auditedProvider, auditedModel);
+  }
 
   const run = await executeAuditFlow({
     productId,
