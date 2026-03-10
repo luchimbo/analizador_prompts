@@ -78,6 +78,14 @@ export async function ensureDatabaseSchema(): Promise<void> {
           `CREATE INDEX IF NOT EXISTS idx_catalog_normalized_name ON catalog_products(normalized_name)`,
           `CREATE INDEX IF NOT EXISTS idx_catalog_brand ON catalog_products(brand)`,
           `
+          CREATE TABLE IF NOT EXISTS catalog_brand_overrides (
+            brand TEXT PRIMARY KEY,
+            classification TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+          )
+          `,
+          `CREATE INDEX IF NOT EXISTS idx_catalog_brand_overrides_classification ON catalog_brand_overrides(classification)`,
+          `
           CREATE TABLE IF NOT EXISTS runs (
             run_id TEXT PRIMARY KEY,
             product_id TEXT,

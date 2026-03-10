@@ -23,6 +23,24 @@ interface HealthConfig {
   defaultKimiModel?: string;
 }
 
+interface CatalogBrandRule {
+  brand: string;
+  skuCount: number;
+  classification: "internal" | "external";
+  source: "default" | "override";
+}
+
+interface CatalogBrandResponse {
+  items: CatalogBrandRule[];
+  totals?: {
+    totalBrands: number;
+    internalBrands: number;
+    externalBrands: number;
+    internalSkus: number;
+    externalSkus: number;
+  };
+}
+
 export function AuditDashboard() {
   const [productUrl, setProductUrl] = useState("");
   const [products, setProducts] = useState<ProductListItem[]>([]);
@@ -40,6 +58,11 @@ export function AuditDashboard() {
   const [savingPromptId, setSavingPromptId] = useState<string | null>(null);
   const [runProgress, setRunProgress] = useState<{ current: number; total: number; promptId?: string; promptText?: string } | null>(null);
   const [streamedResults, setStreamedResults] = useState<PromptAuditResult[]>([]);
+  const [catalogBrandRules, setCatalogBrandRules] = useState<CatalogBrandRule[]>([]);
+  const [loadingBrandRules, setLoadingBrandRules] = useState(false);
+  const [savingBrand, setSavingBrand] = useState<string | null>(null);
+  const [reclassifyingHistory, setReclassifyingHistory] = useState(false);
+  const [reclassifyMessage, setReclassifyMessage] = useState<string | null>(null);
   const [defaultModels, setDefaultModels] = useState<Record<ProviderValue, string>>({
     openai: "",
     gemini: "",
@@ -63,6 +86,7 @@ export function AuditDashboard() {
   useEffect(() => {
     void loadProducts();
     void loadHealthDefaults();
+    void loadCatalogBrandRules();
   }, []);
 
   useEffect(() => {
@@ -89,6 +113,28 @@ export function AuditDashboard() {
       { label: "Avg Rank", value: activeRun.summary.averageRankWhenPresent.toFixed(2) },
     ];
   }, [activeRun]);
+
+  const catalogTotals = useMemo(() => {
+    return catalogBrandRules.reduce(
+      (acc, item) => {
+        if (item.classification === "internal") {
+          acc.internalBrands += 1;
+          acc.internalSkus += item.skuCount;
+        } else {
+          acc.externalBrands += 1;
+          acc.externalSkus += item.skuCount;
+        }
+        return acc;
+      },
+      {
+        totalBrands: catalogBrandRules.length,
+        internalBrands: 0,
+        externalBrands: 0,
+        internalSkus: 0,
+        externalSkus: 0,
+      },
+    );
+  }, [catalogBrandRules]);
 
   async function requestJson<T>(input: string, init?: RequestInit): Promise<T> {
     const response = await fetch(input, {
@@ -125,6 +171,54 @@ export function AuditDashboard() {
       }
     } catch {
       // Keep local fallback behavior when health endpoint is unavailable.
+    }
+  }
+
+  async function loadCatalogBrandRules() {
+    setLoadingBrandRules(true);
+
+    try {
+      const response = await requestJson<CatalogBrandResponse>("/api/catalog/brands", { method: "GET" });
+      setCatalogBrandRules(response.items ?? []);
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : "No se pudo cargar el clasificador de marcas");
+    } finally {
+      setLoadingBrandRules(false);
+    }
+  }
+
+  async function handleBrandClassificationChange(brand: string, classification: "internal" | "external") {
+    setSavingBrand(brand);
+    setError(null);
+
+    try {
+      const response = await requestJson<CatalogBrandResponse>("/api/catalog/brands", {
+        method: "PATCH",
+        body: JSON.stringify({ brand, classification }),
+      });
+      setCatalogBrandRules(response.items ?? []);
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : "No se pudo actualizar la clasificacion");
+    } finally {
+      setSavingBrand(null);
+    }
+  }
+
+  async function handleReclassifyHistory() {
+    setReclassifyingHistory(true);
+    setError(null);
+    setReclassifyMessage(null);
+
+    try {
+      const response = await requestJson<{ ok: boolean; updated: number }>("/api/catalog/reclassify", { method: "POST" });
+      setReclassifyMessage(`Historico recalculado: ${response.updated} filas de resultados actualizadas.`);
+      if (activeRun?.runId) {
+        await loadRun(activeRun.runId);
+      }
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : "No se pudo recalcular el historico");
+    } finally {
+      setReclassifyingHistory(false);
     }
   }
 
@@ -788,6 +882,70 @@ export function AuditDashboard() {
             </article>
           )}
         </section>
+      </section>
+
+      <section className="card run-table-card">
+        <div className="card-head">
+          <span>Clasificacion de competidores por marca</span>
+          <span>{catalogTotals.totalBrands} marcas</span>
+        </div>
+        <p className="stage-copy">
+          Todo SKU del catalogo entra como interno por defecto. Desde aca podes mover marcas a externo cuando ya no se venden o cuando queres tratarlas como competencia directa.
+        </p>
+        <div className="actions">
+          <button onClick={handleReclassifyHistory} disabled={reclassifyingHistory}>
+            {reclassifyingHistory ? "Recalculando historico..." : "Aplicar cambios al historico"}
+          </button>
+          {reclassifyMessage ? <p className="stage-copy">{reclassifyMessage}</p> : null}
+        </div>
+        <div className="summary-strip">
+          <div className="summary-pill">
+            <span>Internas</span>
+            <strong>{catalogTotals.internalBrands} marcas · {catalogTotals.internalSkus} SKUs</strong>
+          </div>
+          <div className="summary-pill">
+            <span>Externas</span>
+            <strong>{catalogTotals.externalBrands} marcas · {catalogTotals.externalSkus} SKUs</strong>
+          </div>
+        </div>
+
+        {loadingBrandRules ? (
+          <p className="empty-state">Cargando clasificacion de marcas...</p>
+        ) : catalogBrandRules.length ? (
+          <div className="result-list">
+            {catalogBrandRules.map((item) => (
+              <div key={item.brand} className="result-item">
+                <div className="result-body">
+                  <div>
+                    <small>Marca</small>
+                    <p>{item.brand}</p>
+                  </div>
+                  <div>
+                    <small>SKUs en catalogo</small>
+                    <p>{item.skuCount}</p>
+                  </div>
+                  <div>
+                    <small>Tipo actual</small>
+                    <p>{item.classification === "internal" ? "Interno" : "Externo"}</p>
+                  </div>
+                  <div>
+                    <small>Definicion</small>
+                    <select
+                      value={item.classification}
+                      disabled={savingBrand === item.brand}
+                      onChange={(event) => void handleBrandClassificationChange(item.brand, event.target.value as "internal" | "external")}
+                    >
+                      <option value="internal">Interno</option>
+                      <option value="external">Externo</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="empty-state">No hay marcas cargadas en catalogo_products todavia.</p>
+        )}
       </section>
     </div>
   );
