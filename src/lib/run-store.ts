@@ -168,7 +168,7 @@ function mapRunRow(runRow: Record<string, unknown>, resultRows: Array<Record<str
     productId: asNullableString(runRow.product_id),
     status: asString(runRow.status) as RunStatus,
     createdAt: asString(runRow.created_at),
-    auditedProvider: asString(runRow.audited_provider),
+    auditedProvider: normalizeProvider(asString(runRow.audited_provider)),
     auditedModel: asString(runRow.audited_model),
     productProfile: parseJson<ProductProfile>(runRow.product_profile_json, {} as ProductProfile),
     promptBank: parseJson<PromptBank>(runRow.prompt_bank_json, {} as PromptBank),
@@ -276,7 +276,7 @@ function mapRunListRow(row: Record<string, unknown>): RunListItem {
     productId: asNullableString(row.product_id),
     status: asString(row.status) as RunStatus,
     createdAt: asString(row.created_at),
-    auditedProvider: asString(row.audited_provider),
+    auditedProvider: normalizeProvider(asString(row.audited_provider)),
     auditedModel: asString(row.audited_model),
     productName: asNullableString(row.product_name),
     exportPath: asNullableString(row.export_path),
@@ -308,4 +308,8 @@ function asNullableString(value: unknown): string | null {
 
 function round(value: number): number {
   return Math.round(value * 10000) / 10000;
+}
+
+function normalizeProvider(value: string): string {
+  return value === "kimi" ? "grok" : value;
 }

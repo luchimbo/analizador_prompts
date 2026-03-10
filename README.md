@@ -8,7 +8,7 @@ Version `Next.js` full-stack para auditar la presencia de un producto dentro de 
 - Muestra una biblioteca de productos disponibles para elegir.
 - Genera un banco de `50 prompts` por producto.
 - Permite editar cada prompt individualmente despues de generado.
-- Ejecuta esos prompts contra un modelo auditado elegido via `OpenRouter` (`OpenAI`, `Gemini`, `Kimi` u otro slug compatible).
+- Ejecuta esos prompts contra un modelo auditado elegido via `OpenRouter` (`OpenAI`, `Gemini`, `Grok` u otro slug compatible).
 - Muestra el progreso de la corrida mientras la IA va respondiendo los 50 prompts.
 - Genera y guarda un `request_id` unico por prompt para auditar que cada llamada salga aislada.
 - Juzga cada respuesta con otro modelo independiente.
@@ -84,7 +84,8 @@ La app queda disponible en `http://127.0.0.1:3002`.
 - `OPENROUTER_API_KEY`: necesaria para generar prompts, ejecutar la auditoria y usar el juez LLM.
 - `OPENROUTER_OPENAI_AUDIT_MODEL`: slug por defecto para auditar OpenAI via OpenRouter.
 - `OPENROUTER_GEMINI_AUDIT_MODEL`: slug por defecto para auditar Gemini via OpenRouter.
-- `OPENROUTER_KIMI_AUDIT_MODEL`: slug por defecto para auditar Kimi via OpenRouter.
+- `OPENROUTER_GROK_AUDIT_MODEL`: slug por defecto para auditar Grok via OpenRouter.
+- `OPENROUTER_KIMI_AUDIT_MODEL`: alias legacy opcional, se usa como fallback para Grok si no definis `OPENROUTER_GROK_AUDIT_MODEL`.
 - `OPENROUTER_WEB_PLUGIN_ID`: plugin de web search que se adjunta cuando `enableWebSearch=true`.
 - `TURSO_DATABASE_URL`: URL de Turso/libSQL. Para local, el default es `file:./data/ia-product-audit.db`.
 - `TURSO_AUTH_TOKEN`: token de Turso. No hace falta para el modo local `file:`.

@@ -10,6 +10,7 @@ export async function GET() {
     openRouterConfigured: Boolean(env.openRouterApiKey),
     defaultOpenAiModel: env.openRouterOpenAiAuditModel,
     defaultGeminiModel: env.openRouterGeminiAuditModel,
-    defaultKimiModel: env.openRouterKimiAuditModel,
+    defaultGrokModel: env.openRouterGrokAuditModel,
+    defaultKimiModel: env.openRouterGrokAuditModel,
   });
 }

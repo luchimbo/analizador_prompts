@@ -14,8 +14,9 @@ export function defaultAuditedModel(provider: AuditedProvider): string {
       return env.openRouterOpenAiAuditModel;
     case "gemini":
       return env.openRouterGeminiAuditModel;
+    case "grok":
     case "kimi":
-      return env.openRouterKimiAuditModel;
+      return env.openRouterGrokAuditModel;
     case "custom":
       throw new Error("For custom audited provider you must send auditedModel");
   }

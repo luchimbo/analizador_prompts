@@ -7,7 +7,7 @@ import type { AuditRunResponse, ProductListItem, ProductRunRequest, PromptAuditR
 const providers = [
   { value: "openai", label: "OpenAI" },
   { value: "gemini", label: "Gemini" },
-  { value: "kimi", label: "Kimi" },
+  { value: "grok", label: "Grok" },
 ] as const;
 
 type ProviderValue = (typeof providers)[number]["value"];
@@ -19,6 +19,7 @@ const LOCKED_MARKET = "Argentina";
 interface HealthConfig {
   defaultOpenAiModel?: string;
   defaultGeminiModel?: string;
+  defaultGrokModel?: string;
   defaultKimiModel?: string;
 }
 
@@ -42,7 +43,7 @@ export function AuditDashboard() {
   const [defaultModels, setDefaultModels] = useState<Record<ProviderValue, string>>({
     openai: "",
     gemini: "",
-    kimi: "",
+    grok: "",
   });
 
   const hasPendingWork = loadingAction !== null || Boolean(savingPromptId);
@@ -112,7 +113,7 @@ export function AuditDashboard() {
       const mappedDefaults: Record<ProviderValue, string> = {
         openai: health.defaultOpenAiModel ?? "",
         gemini: health.defaultGeminiModel ?? "",
-        kimi: health.defaultKimiModel ?? "",
+        grok: health.defaultGrokModel ?? health.defaultKimiModel ?? "",
       };
       setDefaultModels(mappedDefaults);
 
@@ -168,7 +169,7 @@ export function AuditDashboard() {
       setSelectedProductId(productId);
       setSelectedProduct(product);
       if (product.lockedAuditedProvider) {
-        setAuditedProvider(product.lockedAuditedProvider as ProviderValue);
+        setAuditedProvider(normalizeProvider(product.lockedAuditedProvider) as ProviderValue);
       }
       setAuditedModel(product.lockedAuditedModel ?? "");
       setShowPrompts(Boolean(product.promptBank));
@@ -602,7 +603,7 @@ export function AuditDashboard() {
 
                   {lockedAuditTarget ? (
                     <p className="locked-audit-note">
-                      IA bloqueada para este producto: <strong>{lockedAuditTarget.provider}</strong> · <strong>{lockedAuditTarget.model}</strong>
+                      IA bloqueada para este producto: <strong>{formatProviderLabel(lockedAuditTarget.provider)}</strong> · <strong>{lockedAuditTarget.model}</strong>
                     </p>
                   ) : (
                     <p className="locked-audit-note">
@@ -697,7 +698,7 @@ export function AuditDashboard() {
                             className={`run-pill${activeRun?.runId === run.runId ? " is-active" : ""}`}
                             onClick={() => void loadRun(run.runId)}
                           >
-                            <strong>{run.auditedProvider}</strong>
+                            <strong>{formatProviderLabel(run.auditedProvider)}</strong>
                             <span>{formatDate(run.createdAt)}</span>
                           </button>
                         ))}
@@ -726,7 +727,9 @@ export function AuditDashboard() {
                     <div className="card-head">
                       <span>{showingLiveResults ? "Resultados en vivo" : "Resultados del producto"}</span>
                       <span>
-                        {showingLiveResults ? `${auditedProvider} · ${auditedModel || "modelo por defecto"}` : `${activeRun?.auditedProvider} · ${activeRun?.auditedModel}`}
+                        {showingLiveResults
+                          ? `${formatProviderLabel(auditedProvider)} · ${auditedModel || "modelo por defecto"}`
+                          : `${formatProviderLabel(activeRun?.auditedProvider)} · ${activeRun?.auditedModel}`}
                       </span>
                     </div>
 
@@ -795,4 +798,25 @@ function formatDate(value: string): string {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(value));
+}
+
+function normalizeProvider(provider: string | null | undefined): string {
+  return provider === "kimi" ? "grok" : provider ?? "";
+}
+
+function formatProviderLabel(provider: string | null | undefined): string {
+  const normalized = normalizeProvider(provider);
+  if (normalized === "openai") {
+    return "OpenAI";
+  }
+  if (normalized === "gemini") {
+    return "Gemini";
+  }
+  if (normalized === "grok") {
+    return "Grok";
+  }
+  if (normalized === "custom") {
+    return "Custom";
+  }
+  return normalized || "-";
 }

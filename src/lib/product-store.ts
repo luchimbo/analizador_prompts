@@ -303,7 +303,7 @@ function mapProductRow(row: Record<string, unknown>): SavedProduct {
     updatedAt: asString(row.updated_at),
     language: asString(row.language),
     market: asString(row.market),
-    lockedAuditedProvider: asNullableString(row.locked_audited_provider),
+    lockedAuditedProvider: normalizeProvider(asNullableString(row.locked_audited_provider)),
     lockedAuditedModel: asNullableString(row.locked_audited_model),
     latestRunId: asNullableString(row.latest_run_id),
     profile: {
@@ -323,6 +323,13 @@ function mapProductRow(row: Record<string, unknown>): SavedProduct {
     },
     promptBank: parseJson<PromptBank | null>(row.prompt_bank_json, null),
   };
+}
+
+function normalizeProvider(value: string | null): string | null {
+  if (!value) {
+    return value;
+  }
+  return value === "kimi" ? "grok" : value;
 }
 
 function parseJson<T>(value: unknown, fallback: T): T {

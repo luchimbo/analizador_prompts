@@ -122,25 +122,28 @@ export function ensureReadyPromptBank(product: SavedProduct): PromptBank {
 }
 
 export function resolveLockedAuditTarget(product: SavedProduct, requestedProvider?: AuditedProvider, requestedModel?: string | null): { auditedProvider: AuditedProvider; auditedModel: string } {
-  const requestedAuditedProvider = requestedProvider ?? "openai";
+  const requestedAuditedProvider = normalizeAuditedProvider(requestedProvider ?? "openai");
   const requestedAuditedModel = requestedModel?.trim() || defaultAuditedModel(requestedAuditedProvider);
 
-  if (!product.lockedAuditedProvider || !product.lockedAuditedModel) {
+  const lockedProvider = product.lockedAuditedProvider ? normalizeAuditedProvider(product.lockedAuditedProvider as AuditedProvider) : null;
+  const lockedModel = product.lockedAuditedModel;
+
+  if (!lockedProvider || !lockedModel) {
     return {
       auditedProvider: requestedAuditedProvider,
       auditedModel: requestedAuditedModel,
     };
   }
 
-  if (product.lockedAuditedProvider !== requestedAuditedProvider || product.lockedAuditedModel !== requestedAuditedModel) {
+  if (lockedProvider !== requestedAuditedProvider || lockedModel !== requestedAuditedModel) {
     throw new Error(
-      `Este producto ya quedo bloqueado a ${product.lockedAuditedProvider} / ${product.lockedAuditedModel}. Para comparar antes y despues tenes que usar siempre esa misma IA.`,
+      `Este producto ya quedo bloqueado a ${lockedProvider} / ${lockedModel}. Para comparar antes y despues tenes que usar siempre esa misma IA.`,
     );
   }
 
   return {
-    auditedProvider: product.lockedAuditedProvider as AuditedProvider,
-    auditedModel: product.lockedAuditedModel,
+    auditedProvider: lockedProvider,
+    auditedModel: lockedModel,
   };
 }
 
@@ -380,4 +383,11 @@ function buildSummary(results: PromptAuditResult[]): RunSummary {
 
 function round(value: number): number {
   return Math.round(value * 10000) / 10000;
+}
+
+function normalizeAuditedProvider(provider: AuditedProvider): AuditedProvider {
+  if (provider === "kimi") {
+    return "grok";
+  }
+  return provider;
 }
