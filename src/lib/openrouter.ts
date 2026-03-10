@@ -46,6 +46,8 @@ async function requestChatCompletion({
   enableWebSearch = false,
 }: ChatOptions): Promise<{ data: OpenRouterResponse; latencyMs: number }> {
   const apiKey = assertOpenRouterKey();
+  const timeoutSeconds = Math.max(5, Number.isFinite(env.requestTimeoutSeconds) ? env.requestTimeoutSeconds : 60);
+  const timeoutMs = timeoutSeconds * 1000;
 
   const payload: Record<string, unknown> = {
     model,
@@ -62,18 +64,32 @@ async function requestChatCompletion({
   }
 
   const startedAt = Date.now();
-  const response = await fetch(`${env.openRouterBaseUrl}/chat/completions`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-      ...(requestId ? { "X-Request-Id": requestId } : {}),
-      ...(env.openRouterSiteUrl ? { "HTTP-Referer": env.openRouterSiteUrl } : {}),
-      "X-Title": env.openRouterAppName,
-    },
-    body: JSON.stringify(payload),
-    cache: "no-store",
-  });
+  const timeoutController = new AbortController();
+  const timeoutHandle = setTimeout(() => timeoutController.abort(), timeoutMs);
+
+  let response: Response;
+  try {
+    response = await fetch(`${env.openRouterBaseUrl}/chat/completions`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+        ...(requestId ? { "X-Request-Id": requestId } : {}),
+        ...(env.openRouterSiteUrl ? { "HTTP-Referer": env.openRouterSiteUrl } : {}),
+        "X-Title": env.openRouterAppName,
+      },
+      body: JSON.stringify(payload),
+      cache: "no-store",
+      signal: timeoutController.signal,
+    });
+  } catch (error) {
+    if (timeoutController.signal.aborted) {
+      throw new Error(`OpenRouter timeout after ${timeoutSeconds}s for model ${model}`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutHandle);
+  }
 
   if (!response.ok) {
     const detail = await response.text();

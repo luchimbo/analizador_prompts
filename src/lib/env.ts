@@ -1,5 +1,6 @@
 const env = {
   appName: process.env.APP_NAME ?? "IA Product Audit",
+  requestTimeoutSeconds: Number(process.env.REQUEST_TIMEOUT_SECONDS ?? "60"),
   defaultLanguage: process.env.DEFAULT_LANGUAGE ?? "es",
   defaultMarket: process.env.DEFAULT_MARKET ?? "Argentina",
   verifyDetectedUrls: process.env.VERIFY_DETECTED_URLS === "true",
