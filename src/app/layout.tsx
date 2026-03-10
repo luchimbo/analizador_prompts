@@ -17,7 +17,7 @@ const body = IBM_Plex_Sans({
 
 export const metadata: Metadata = {
   title: "IA Product Audit",
-  description: "Audit de presencia de producto en motores de IA con 50 prompts y exportacion a Excel.",
+  description: "Audit de presencia de producto en motores de IA con bancos de 25 prompts nuevos, compatibilidad legacy de 50 y exportacion a Excel.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

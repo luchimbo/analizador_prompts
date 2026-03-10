@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 
+import { buildRunSummary, isSupportedPromptCount, STANDARD_PROMPT_COUNT } from "@/lib/audit-metrics";
 import { normalizeAuditedModel } from "@/lib/audit-models";
 import { env } from "@/lib/env";
 import { defaultAuditedModel, executeAuditPrompt } from "@/lib/audit-runner";
@@ -123,11 +124,11 @@ export async function generateProductPrompts(productId: string): Promise<SavedPr
 
 export function ensureReadyPromptBank(product: SavedProduct): PromptBank {
   if (!product.promptBank) {
-    throw new Error("Primero genera los 50 prompts del producto antes de correr la auditoria.");
+    throw new Error(`Primero genera los ${STANDARD_PROMPT_COUNT} prompts del producto antes de correr la auditoria.`);
   }
 
-  if (product.promptBank.prompts.length !== 50) {
-    throw new Error("El banco de prompts no esta completo. Regenera los 50 prompts antes de correr la auditoria.");
+  if (!isSupportedPromptCount(product.promptBank.prompts.length)) {
+    throw new Error("El banco de prompts no esta completo. Regeneralo con un formato soportado antes de correr la auditoria.");
   }
 
   if (product.promptBank.language !== LOCKED_LANGUAGE || product.promptBank.market !== LOCKED_MARKET) {
@@ -414,7 +415,7 @@ async function executeAuditFlow({
       await finalizeRunRecord({
         runId,
         status: "failed",
-        summary: partialResults.length ? buildSummary(partialResults) : null,
+        summary: partialResults.length ? buildRunSummary(partialResults) : null,
         errorMessage: failedError.message,
         errorStage: workerErrorStage ?? inferErrorStage(failedError.message),
         failedPromptId: workerFailedPromptId,
@@ -426,7 +427,7 @@ async function executeAuditFlow({
 
     results.push(...orderedResults.filter((result): result is PromptAuditResult => Boolean(result)));
 
-    const summary = buildSummary(results);
+    const summary = buildRunSummary(results);
     await finalizeRunRecord({ runId, status: "completed", summary, completedPrompts: results.length });
 
     return {
@@ -455,7 +456,7 @@ async function executeAuditFlow({
       await finalizeRunRecord({
         runId,
         status: "failed",
-        summary: results.length ? buildSummary(results) : null,
+        summary: results.length ? buildRunSummary(results) : null,
         errorMessage,
         errorStage: inferErrorStage(errorMessage),
         failedPromptId: null,
@@ -482,30 +483,6 @@ function inferErrorStage(message: string): string {
     return "db_write";
   }
   return "unknown";
-}
-
-function buildSummary(results: PromptAuditResult[]): RunSummary {
-  const total = results.length;
-  const productHits = results.reduce((acc, result) => acc + result.productHit, 0);
-  const vendorHits = results.reduce((acc, result) => acc + result.vendorHit, 0);
-  const exactHits = results.reduce((acc, result) => acc + result.exactUrlAccuracy, 0);
-  const internalTotal = results.reduce((acc, result) => acc + result.internalAlternatives, 0);
-  const externalTotal = results.reduce((acc, result) => acc + result.externalCompetitors, 0);
-  const ranks = results.map((result) => result.rank).filter((rank) => rank > 0);
-
-  return {
-    totalPrompts: total,
-    productHitRate: total ? round(productHits / total) : 0,
-    vendorHitRate: total ? round(vendorHits / total) : 0,
-    exactUrlAccuracyRate: total ? round(exactHits / total) : 0,
-    averageInternalAlternatives: total ? round(internalTotal / total) : 0,
-    averageExternalCompetitors: total ? round(externalTotal / total) : 0,
-    averageRankWhenPresent: ranks.length ? round(ranks.reduce((acc, rank) => acc + rank, 0) / ranks.length) : 0,
-  };
-}
-
-function round(value: number): number {
-  return Math.round(value * 10000) / 10000;
 }
 
 function normalizeAuditedProvider(provider: AuditedProvider): AuditedProvider {

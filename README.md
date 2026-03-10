@@ -6,13 +6,14 @@ Version `Next.js` full-stack para auditar la presencia de un producto dentro de 
 
 - Guarda productos a partir de una `URL`.
 - Muestra una biblioteca de productos disponibles para elegir.
-- Genera un banco de `50 prompts` por producto.
-- Permite editar cada prompt individualmente despues de generado.
+- Genera un banco de `25 prompts` para productos nuevos y mantiene compatibilidad con bancos legacy de `50 prompts`.
+- Guarda el banco de prompts generado como un experimento inmutable.
 - Ejecuta esos prompts contra un modelo auditado elegido via `OpenRouter` (`OpenAI`, `Gemini` u otro slug compatible en modo `custom`).
-- Muestra el progreso de la corrida mientras la IA va respondiendo los 50 prompts.
+- Muestra el progreso de la corrida mientras la IA va respondiendo el banco completo de prompts.
 - Genera y guarda un `request_id` unico por prompt para auditar que cada llamada salga aislada.
 - Juzga cada respuesta con otro modelo independiente.
 - Permite revisar corridas historicas y exportar un `Excel` por run.
+- Calcula un `overall score` de `0 a 100` por corrida a partir de todos los prompts y resultados.
 - El mercado queda bloqueado a `Argentina` y el idioma de trabajo a `es` para no mezclar paises en la medicion.
 - El producto queda bloqueado a la primera IA usada para mantener comparables los antes/despues.
 - Las alternativas se desdoblan en `Internal_Alternatives` y `External_Competitors`.
@@ -58,7 +59,7 @@ La app queda disponible en `http://127.0.0.1:3002`.
 1. Abrir la home y pegar una `URL` de producto.
 2. Usar `Guardar producto` para sumarlo a la biblioteca argentina.
 3. Elegir uno de los productos disponibles en la columna izquierda.
-4. Generar o revisar sus `50 prompts`.
+4. Generar o revisar su banco de prompts (`25` nuevos o `50` legacy).
 5. Elegir que IA responde los prompts y correr la auditoria.
 6. Revisar la corrida y descargar el Excel desde la UI o desde `/api/runs/{run_id}/excel`.
 

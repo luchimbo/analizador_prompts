@@ -1,3 +1,4 @@
+import { buildRunSummary, ensureRunSummary, STANDARD_PROMPT_COUNT } from "@/lib/audit-metrics";
 import { normalizeAuditedModel } from "@/lib/audit-models";
 import { getDb } from "@/lib/db";
 import type { AuditRunResponse, PromptAuditResult, ProductProfile, PromptBank, RunListItem, RunSummary, RunStatus } from "@/lib/types";
@@ -368,6 +369,7 @@ export async function countRunsByProduct(productId: string): Promise<number> {
 
 function mapRunRow(runRow: Record<string, unknown>, resultRows: Array<Record<string, unknown>>): AuditRunResponse {
   const auditedProvider = normalizeProvider(asString(runRow.audited_provider));
+  const parsedResults = resultRows.map(mapRunResultRow);
   return {
     runId: asString(runRow.run_id),
     productId: asNullableString(runRow.product_id),
@@ -377,8 +379,8 @@ function mapRunRow(runRow: Record<string, unknown>, resultRows: Array<Record<str
     auditedModel: normalizeAuditedModel(auditedProvider, asString(runRow.audited_model)) ?? "",
     productProfile: parseJson<ProductProfile>(runRow.product_profile_json, {} as ProductProfile),
     promptBank: parseJson<PromptBank>(runRow.prompt_bank_json, {} as PromptBank),
-    results: resultRows.map(mapRunResultRow),
-    summary: parseJson<RunSummary | null>(runRow.summary_json, null),
+    results: parsedResults,
+    summary: ensureRunSummary(parseJson<RunSummary | null>(runRow.summary_json, null), parsedResults),
     exportPath: asNullableString(runRow.export_path),
     errorMessage: asNullableString(runRow.error_message),
     errorStage: asNullableString(runRow.error_stage),
@@ -402,14 +404,14 @@ async function repairStaleRunningRuns(): Promise<void> {
 
     const runId = asString(row.run_id);
     const promptBank = parseJson<PromptBank | null>(row.prompt_bank_json, null);
-    const expectedTotal = promptBank?.prompts.length ?? 50;
+    const expectedTotal = promptBank?.prompts.length ?? STANDARD_PROMPT_COUNT;
     const partialRun = await getRunWithoutRepair(runId);
     if (!partialRun) {
       continue;
     }
 
     const completedPrompts = partialRun.results.length;
-    const summary = completedPrompts ? buildSummaryFromResults(partialRun.results) : null;
+    const summary = completedPrompts ? buildRunSummary(partialRun.results) : null;
     const nextStatus: RunStatus = completedPrompts >= expectedTotal ? "completed" : "failed";
     const errorMessage =
       nextStatus === "failed" ? `Run interrupted before finishing all prompts (${completedPrompts}/${expectedTotal}).` : partialRun.errorMessage ?? null;
@@ -436,26 +438,6 @@ async function getRunWithoutRepair(runId: string): Promise<AuditRunResponse | nu
   }
   const resultsResult = await db.execute({ sql: `SELECT * FROM run_results WHERE run_id = ? ORDER BY prompt_order ASC`, args: [runId] });
   return mapRunRow(runRow, resultsResult.rows);
-}
-
-function buildSummaryFromResults(results: PromptAuditResult[]): RunSummary {
-  const total = results.length;
-  const productHits = results.reduce((acc, result) => acc + result.productHit, 0);
-  const vendorHits = results.reduce((acc, result) => acc + result.vendorHit, 0);
-  const exactHits = results.reduce((acc, result) => acc + result.exactUrlAccuracy, 0);
-  const internalTotal = results.reduce((acc, result) => acc + result.internalAlternatives, 0);
-  const externalTotal = results.reduce((acc, result) => acc + result.externalCompetitors, 0);
-  const ranks = results.map((result) => result.rank).filter((rank) => rank > 0);
-
-  return {
-    totalPrompts: total,
-    productHitRate: total ? round(productHits / total) : 0,
-    vendorHitRate: total ? round(vendorHits / total) : 0,
-    exactUrlAccuracyRate: total ? round(exactHits / total) : 0,
-    averageInternalAlternatives: total ? round(internalTotal / total) : 0,
-    averageExternalCompetitors: total ? round(externalTotal / total) : 0,
-    averageRankWhenPresent: ranks.length ? round(ranks.reduce((acc, rank) => acc + rank, 0) / ranks.length) : 0,
-  };
 }
 
 function mapRunResultRow(row: Record<string, unknown>): PromptAuditResult {

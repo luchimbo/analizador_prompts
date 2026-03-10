@@ -1,27 +1,20 @@
+import { STANDARD_PROMPT_COUNT, STANDARD_TYPE_COUNTS } from "@/lib/audit-metrics";
 import { env } from "@/lib/env";
 import { openRouterChatJson } from "@/lib/openrouter";
 import type { AuditPrompt, ProductProfile, PromptBank, PromptType } from "@/lib/types";
 import { normalizeWhitespace } from "@/lib/utils";
 
-const TYPE_COUNTS: Record<PromptType, number> = {
-  problem: 20,
-  discovery: 10,
-  comparison: 10,
-  transactional: 5,
-  branded: 5,
-};
-
 const GENERATOR_SYSTEM_PROMPT = `You generate high quality search prompts for a GEO audit focused on a single product URL.
 You must return strict JSON only.
 
 Rules:
-- Generate exactly 50 prompts.
+- Generate exactly ${STANDARD_PROMPT_COUNT} prompts.
 - Use these exact type counts:
-  - 20 problem
-  - 10 discovery
-  - 10 comparison
-  - 5 transactional
-  - 5 branded
+  - ${STANDARD_TYPE_COUNTS.problem} problem
+  - ${STANDARD_TYPE_COUNTS.discovery} discovery
+  - ${STANDARD_TYPE_COUNTS.comparison} comparison
+  - ${STANDARD_TYPE_COUNTS.transactional} transactional
+  - ${STANDARD_TYPE_COUNTS.branded} branded
 - Keep prompts natural, varied, and non-duplicated.
 - Most prompts must be unbranded and realistic for a buyer.
 - Do not mention the target product in problem, discovery, or most comparison prompts unless it is natural.
@@ -94,7 +87,7 @@ async function generateWithLlm(profile: ProductProfile, language: string, market
 
 function generateFallback(profile: ProductProfile, language: string, market: string): PromptBank {
   const prompts = language.startsWith("es") ? spanishTemplates(profile, market) : englishTemplates(profile, market);
-  return {
+  return validatePromptBank({
     productName: profile.productName,
     brandName: profile.brandName ?? null,
     category: profile.category ?? null,
@@ -105,12 +98,12 @@ function generateFallback(profile: ProductProfile, language: string, market: str
       type: item.type,
       prompt: item.prompt,
     })),
-  };
+  });
 }
 
 export function validatePromptBank(bank: PromptBank): PromptBank {
-  if (bank.prompts.length !== 50) {
-    throw new Error("El generador no devolvio exactamente 50 prompts");
+  if (bank.prompts.length !== STANDARD_PROMPT_COUNT) {
+    throw new Error(`El generador no devolvio exactamente ${STANDARD_PROMPT_COUNT} prompts`);
   }
 
   const seen = new Set<string>();
@@ -131,7 +124,7 @@ export function validatePromptBank(bank: PromptBank): PromptBank {
     } satisfies AuditPrompt;
   });
 
-  for (const [type, expected] of Object.entries(TYPE_COUNTS) as Array<[PromptType, number]>) {
+  for (const [type, expected] of Object.entries(STANDARD_TYPE_COUNTS) as Array<[PromptType, number]>) {
     if ((counts.get(type) ?? 0) !== expected) {
       throw new Error(`La distribucion de tipos no coincide para ${type}`);
     }
@@ -209,7 +202,7 @@ function spanishTemplates(profile: ProductProfile, market: string): AuditPrompt[
     ]],
   ];
 
-  return flattenPromptGroups(groups);
+  return flattenPromptGroups(groups, STANDARD_TYPE_COUNTS);
 }
 
 function englishTemplates(profile: ProductProfile, market: string): AuditPrompt[] {
@@ -281,14 +274,15 @@ function englishTemplates(profile: ProductProfile, market: string): AuditPrompt[
     ]],
   ];
 
-  return flattenPromptGroups(groups);
+  return flattenPromptGroups(groups, STANDARD_TYPE_COUNTS);
 }
 
-function flattenPromptGroups(groups: Array<[PromptType, string[]]>): AuditPrompt[] {
+function flattenPromptGroups(groups: Array<[PromptType, string[]]>, counts: Record<PromptType, number>): AuditPrompt[] {
   const prompts: AuditPrompt[] = [];
   let index = 1;
   for (const [type, items] of groups) {
-    for (const item of items) {
+    const expected = counts[type] ?? items.length;
+    for (const item of items.slice(0, expected)) {
       prompts.push({ id: `P${String(index).padStart(2, "0")}`, type, prompt: normalizeWhitespace(item) });
       index += 1;
     }

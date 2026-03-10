@@ -105,6 +105,15 @@ export interface AlternativeClassification {
 
 export interface PromptAuditResult extends PromptExecutionResult, JudgedMetrics {}
 
+export interface RunScoreBreakdown {
+  productHitPoints: number;
+  rankPoints: number;
+  exactUrlPoints: number;
+  vendorPoints: number;
+  externalPressurePoints: number;
+  internalPressurePoints: number;
+}
+
 export interface RunSummary {
   totalPrompts: number;
   productHitRate: number;
@@ -113,6 +122,9 @@ export interface RunSummary {
   averageInternalAlternatives: number;
   averageExternalCompetitors: number;
   averageRankWhenPresent: number;
+  overallScore: number;
+  scoreLabel: string;
+  scoreBreakdown: RunScoreBreakdown;
 }
 
 export interface AuditRunRequest {

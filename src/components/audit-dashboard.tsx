@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+import { getPromptPlanDescription, getPromptPlanLabel, inferPromptCount, isLegacyPromptCount, isSupportedPromptCount, STANDARD_PROMPT_COUNT } from "@/lib/audit-metrics";
 import type { AuditRunResponse, ProductListItem, ProductRunRequest, PromptAuditResult, RunListItem, RunProgressEvent, SavedProduct } from "@/lib/types";
 
 const providers = [
@@ -79,9 +80,10 @@ export function AuditDashboard() {
       }
     : null;
   const hasReadyPromptBank =
-    selectedProduct?.promptBank?.prompts.length === 50 &&
-    selectedProduct.promptBank.language === LOCKED_LANGUAGE &&
-    selectedProduct.promptBank.market === LOCKED_MARKET;
+    isSupportedPromptCount(selectedProduct?.promptBank?.prompts.length ?? 0) &&
+    selectedProduct?.promptBank?.language === LOCKED_LANGUAGE &&
+    selectedProduct?.promptBank?.market === LOCKED_MARKET;
+  const selectedPromptCount = inferPromptCount(selectedProduct?.promptBank) || STANDARD_PROMPT_COUNT;
   const showingLiveResults = loadingAction === "run" || streamedResults.length > 0;
   const visibleResults = showingLiveResults ? streamedResults : activeRun?.results ?? [];
 
@@ -107,6 +109,9 @@ export function AuditDashboard() {
     }
 
     return [
+      { label: "Score", value: `${activeRun.summary.overallScore.toFixed(1)}/100` },
+      { label: "Nivel", value: activeRun.summary.scoreLabel },
+      { label: "Muestra", value: getPromptPlanLabel(activeRun.summary.totalPrompts) },
       { label: "Product Hit", value: `${Math.round(activeRun.summary.productHitRate * 100)}%` },
       { label: "Vendor Hit", value: `${Math.round(activeRun.summary.vendorHitRate * 100)}%` },
       { label: "URL Accuracy", value: `${Math.round(activeRun.summary.exactUrlAccuracyRate * 100)}%` },
@@ -146,6 +151,7 @@ export function AuditDashboard() {
     const before = leftCompareRun.summary;
     const after = rightCompareRun.summary;
     return [
+      { label: "Overall Score", before: before.overallScore, after: after.overallScore, percent: false },
       { label: "Product Hit", before: before.productHitRate, after: after.productHitRate, percent: true },
       { label: "Vendor Hit", before: before.vendorHitRate, after: after.vendorHitRate, percent: true },
       { label: "URL Accuracy", before: before.exactUrlAccuracyRate, after: after.exactUrlAccuracyRate, percent: true },
@@ -180,6 +186,20 @@ export function AuditDashboard() {
     }
 
     return diffs;
+  }, [leftCompareRun, rightCompareRun]);
+
+  const comparisonPromptPlanNote = useMemo(() => {
+    if (!leftCompareRun || !rightCompareRun) {
+      return null;
+    }
+
+    const leftCount = inferPromptCount(leftCompareRun.promptBank);
+    const rightCount = inferPromptCount(rightCompareRun.promptBank);
+    if (!leftCount || !rightCount || leftCount === rightCount) {
+      return null;
+    }
+
+    return `Comparacion entre muestras distintas: ${getPromptPlanLabel(leftCount)} vs ${getPromptPlanLabel(rightCount)}.`;
   }, [leftCompareRun, rightCompareRun]);
 
   async function requestJson<T>(input: string, init?: RequestInit): Promise<T> {
@@ -451,7 +471,7 @@ export function AuditDashboard() {
       };
       setStreamedResults([]);
       setActiveRun(null);
-      setRunProgress({ current: 0, total: selectedProduct?.promptBank?.prompts.length ?? 50 });
+      setRunProgress({ current: 0, total: selectedProduct?.promptBank?.prompts.length ?? STANDARD_PROMPT_COUNT });
       const response = await fetch(`/api/products/${selectedProductId}/runs/stream`, {
         method: "POST",
         body: JSON.stringify(payload),
@@ -487,13 +507,13 @@ export function AuditDashboard() {
 
           const event = JSON.parse(trimmed) as RunProgressEvent;
           if (event.type === "started") {
-            setRunProgress({ current: event.current ?? 0, total: event.total ?? 50 });
+            setRunProgress({ current: event.current ?? 0, total: event.total ?? selectedProduct?.promptBank?.prompts.length ?? STANDARD_PROMPT_COUNT });
             setStreamedResults([]);
           }
           if (event.type === "progress") {
             setRunProgress({
               current: event.current ?? 0,
-              total: event.total ?? 50,
+              total: event.total ?? selectedProduct?.promptBank?.prompts.length ?? STANDARD_PROMPT_COUNT,
               promptId: event.promptId,
               promptText: event.promptText,
             });
@@ -561,7 +581,7 @@ export function AuditDashboard() {
           <span className="eyebrow">GEO Product Audit</span>
           <h1>Primero elegis el producto. Despues ves prompts, respuestas y Excel.</h1>
           <p>
-            La interfaz ahora trabaja como una biblioteca de productos para el mercado argentino: agregas URLs, elegis una ficha guardada, generas sus 50 prompts, elegis que IA la responda y revisas la corrida completa desde el mismo lugar.
+            La interfaz trabaja como una biblioteca de productos para el mercado argentino: agregas URLs, elegis una ficha guardada, generas sus prompts, elegis que IA la responda y revisas la corrida completa desde el mismo lugar.
           </p>
         </div>
         <div className="hero-metrics hero-metrics-tight">
@@ -630,7 +650,7 @@ export function AuditDashboard() {
                       <p>{product.brandName ?? product.storeName ?? "Sin marca detectada"}</p>
                     </div>
                     <div className="product-meta-grid">
-                      <span>{product.promptCount}/50 prompts</span>
+                      <span>{getPromptPlanDescription(product.promptCount || STANDARD_PROMPT_COUNT)}</span>
                       <span>{product.runCount} corridas</span>
                     </div>
                   </button>
@@ -678,18 +698,18 @@ export function AuditDashboard() {
               <div className="stage-columns">
                 <article className="card stage-card">
                   <div className="card-head">
-                    <span>50 prompts</span>
+                    <span>{getPromptPlanLabel(selectedPromptCount)}</span>
                     <span>{selectedProduct.promptBank?.prompts.length ?? 0} listos</span>
                   </div>
                   <p className="stage-copy">
-                    Genera el banco una sola vez, se guarda fijo y no se modifica. Revisa exactamente esas 50 consultas antes de correr la auditoria.
+                    {`Genera el banco una sola vez, se guarda fijo y no se modifica. Los productos nuevos usan ${STANDARD_PROMPT_COUNT} prompts y los bancos legacy de 50 se conservan tal cual.`}
                   </p>
                   <div className="actions">
                     <button onClick={handleGeneratePrompts} disabled={hasPendingWork || Boolean(selectedProduct.promptBank)}>
-                      {loadingAction === "prompts" ? "Generando prompts..." : selectedProduct.promptBank ? "50 prompts guardados" : "Generar 50 prompts"}
+                      {loadingAction === "prompts" ? "Generando prompts..." : selectedProduct.promptBank ? `${getPromptPlanLabel(selectedPromptCount)} guardados` : `Generar ${STANDARD_PROMPT_COUNT} prompts`}
                     </button>
                     <button onClick={() => setShowPrompts((current) => !current)} disabled={!selectedProduct.promptBank}>
-                      {showPrompts ? "Ocultar prompts" : "Ver 50 prompts"}
+                      {showPrompts ? "Ocultar prompts" : `Ver ${selectedPromptCount} prompts`}
                     </button>
                   </div>
 
@@ -716,7 +736,7 @@ export function AuditDashboard() {
                     <span>{activeRun ? `Run ${activeRun.runId.slice(0, 8)}` : "sin correr"}</span>
                   </div>
                   <p className="stage-copy">
-                    Elegi que motor va a responder los 50 prompts del producto seleccionado. Todas las corridas salen fijas para Argentina y quedan disponibles para revisar y descargar.
+                    Elegi que motor va a responder los prompts del producto seleccionado. Todas las corridas salen fijas para Argentina y quedan disponibles para revisar y descargar.
                   </p>
 
                   {lockedAuditTarget ? (
@@ -763,11 +783,11 @@ export function AuditDashboard() {
 
                   <div className="actions">
                     <button className="primary" onClick={() => void handleRunAudit()} disabled={hasPendingWork || !selectedProduct || !hasReadyPromptBank}>
-                      {loadingAction === "run" ? "Ejecutando los 50 prompts..." : "Responder 50 prompts"}
+                      {loadingAction === "run" ? `Ejecutando ${selectedPromptCount} prompts...` : `Responder ${selectedPromptCount} prompts`}
                     </button>
                     {activeRun?.resumable ? (
                       <button onClick={() => void handleRunAudit(activeRun.runId)} disabled={hasPendingWork || !selectedProduct || !hasReadyPromptBank}>
-                        {loadingAction === "run" ? "Reanudando..." : `Reanudar corrida (${activeRun.completedPrompts ?? activeRun.results.length}/50)`}
+                        {loadingAction === "run" ? "Reanudando..." : `Reanudar corrida (${activeRun.completedPrompts ?? activeRun.results.length}/${inferPromptCount(activeRun.promptBank) || selectedPromptCount})`}
                       </button>
                     ) : null}
                     {activeRun ? (
@@ -788,7 +808,7 @@ export function AuditDashboard() {
 
                   {!hasReadyPromptBank ? (
                     <p className="empty-state">
-                      Antes de generar las 50 respuestas, primero tenes que generar y guardar los 50 prompts de este producto.
+                      Antes de generar las respuestas, primero tenes que generar y guardar el banco de prompts de este producto.
                     </p>
                   ) : null}
 
@@ -846,14 +866,21 @@ export function AuditDashboard() {
               {visibleResults.length ? (
                 <section className="run-section">
                   {!showingLiveResults && activeRun ? (
-                    <div className="summary-strip">
-                      {summaryCards.map((item) => (
-                        <div key={item.label} className="summary-pill">
-                          <span>{item.label}</span>
-                          <strong>{item.value}</strong>
-                        </div>
-                      ))}
-                    </div>
+                    <>
+                      <div className="summary-strip">
+                        {summaryCards.map((item) => (
+                          <div key={item.label} className="summary-pill">
+                            <span>{item.label}</span>
+                            <strong>{item.value}</strong>
+                          </div>
+                        ))}
+                      </div>
+                      {activeRun.summary ? (
+                        <p className="stage-copy">
+                          {`Score breakdown: Hit ${activeRun.summary.scoreBreakdown.productHitPoints.toFixed(2)} · Rank ${activeRun.summary.scoreBreakdown.rankPoints.toFixed(2)} · URL ${activeRun.summary.scoreBreakdown.exactUrlPoints.toFixed(2)} · Vendor ${activeRun.summary.scoreBreakdown.vendorPoints.toFixed(2)} · Ext ${activeRun.summary.scoreBreakdown.externalPressurePoints.toFixed(2)} · Int ${activeRun.summary.scoreBreakdown.internalPressurePoints.toFixed(2)}`}
+                        </p>
+                      ) : null}
+                    </>
                   ) : null}
 
                   <article className="card run-table-card">
@@ -959,6 +986,7 @@ export function AuditDashboard() {
                     </div>
                     {comparisonSummary ? (
                       <>
+                        {comparisonPromptPlanNote ? <p className="stage-copy">{comparisonPromptPlanNote}</p> : null}
                         <div className="summary-strip">
                           {comparisonSummary.map((item) => {
                             const delta = item.after - item.before;
@@ -1017,7 +1045,7 @@ export function AuditDashboard() {
               </div>
               <h2>Elegi un producto guardado para trabajar por etapas.</h2>
               <p>
-                Cuando selecciones uno vas a poder generar sus 50 prompts, elegir la IA que responde y revisar las corridas con su Excel correspondiente.
+                Cuando selecciones uno vas a poder generar su banco de prompts, elegir la IA que responde y revisar las corridas con su Excel correspondiente.
               </p>
             </article>
           )}
