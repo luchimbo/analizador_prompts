@@ -145,7 +145,7 @@ export async function classifyAlternativeMentions({
   const knownBrandMap = buildKnownBrandMap(catalog, brandRules);
   const brandRuleMap = new Map(brandRules.map((rule) => [rule.brand, rule.classification]));
   const heuristicBrandCandidates = responseText
-    ? extractBrandCandidatesFromResponse(responseText, knownBrandMap, principalSet, ignoredSet)
+    ? extractKnownBrandCandidatesFromResponse(responseText, knownBrandMap, principalSet, ignoredSet)
     : [];
   const mentionInputs = uniquePreserveOrder([...mentions, ...heuristicBrandCandidates]).sort((left, right) => {
     const tokenDelta = tokenize(right).length - tokenize(left).length;
@@ -191,7 +191,6 @@ export async function classifyAlternativeMentions({
         mention,
         knownBrandMap,
         brandRuleMap,
-        heuristicBrandCandidates: new Set(heuristicBrandCandidates.map((item) => normalize(item)).filter(Boolean)),
         coveredBrands: seenCoveredBrands,
       });
       classifications.push(singleTokenClassification.classification);
@@ -451,7 +450,7 @@ function buildKnownBrandMap(catalog: CatalogRow[], overrides: BrandOverrideRow[]
   return brands;
 }
 
-function extractBrandCandidatesFromResponse(
+function extractKnownBrandCandidatesFromResponse(
   responseText: string,
   knownBrandMap: Map<string, string>,
   principalSet: Set<string>,
@@ -471,24 +470,6 @@ function extractBrandCandidatesFromResponse(
         candidates.push(displayBrand);
       }
     }
-
-    const rawTokens = segment.split(/\s+/).map(stripOuterPunctuation).filter(Boolean);
-    for (let index = 0; index < rawTokens.length - 1; index += 1) {
-      const current = rawTokens[index];
-      const next = rawTokens[index + 1];
-      if (!current || !next) {
-        continue;
-      }
-
-      const normalizedCurrent = normalize(current);
-      if (!normalizedCurrent || knownBrandMap.has(normalizedCurrent) || isPrincipalMention(normalizedCurrent, principalSet) || isIgnoredEntityMention(normalizedCurrent, ignoredSet)) {
-        continue;
-      }
-      if (!hasUppercase(current) || !looksLikeModelToken(next) || GENERIC_BRAND_STOPWORDS.has(normalizedCurrent)) {
-        continue;
-      }
-      candidates.push(current);
-    }
   }
 
   return uniquePreserveOrder(candidates);
@@ -499,14 +480,12 @@ function classifySingleTokenMention({
   mention,
   knownBrandMap,
   brandRuleMap,
-  heuristicBrandCandidates,
   coveredBrands,
 }: {
   mentionRaw: string;
   mention: string;
   knownBrandMap: Map<string, string>;
   brandRuleMap: Map<string, BrandClassification>;
-  heuristicBrandCandidates: Set<string>;
   coveredBrands: Set<string>;
 }): { classification: AlternativeClassification; isExternal: boolean } {
   const knownBrand = knownBrandMap.get(mention);
@@ -547,20 +526,6 @@ function classifySingleTokenMention({
         matchedBrand: knownBrand,
       },
       isExternal: false,
-    };
-  }
-
-  if (heuristicBrandCandidates.has(mention)) {
-    coveredBrands.add(mention);
-    return {
-      classification: {
-        mention: mentionRaw,
-        normalizedMention: mention,
-        classification: "external",
-        reason: "unknown_brand",
-        matchedBrand: mentionRaw,
-      },
-      isExternal: true,
     };
   }
 
@@ -767,7 +732,7 @@ function looksLikeModelToken(value: string): boolean {
   if (!cleaned) {
     return false;
   }
-  return /\d/.test(cleaned) || /^[A-Z0-9-]{2,}$/i.test(cleaned);
+  return /\d/.test(cleaned);
 }
 
 function inferBrandFromMention(
