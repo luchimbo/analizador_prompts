@@ -53,9 +53,6 @@ export function AuditDashboard() {
   const [showPrompts, setShowPrompts] = useState(false);
   const [loadingAction, setLoadingAction] = useState<LoadingAction>("boot");
   const [error, setError] = useState<string | null>(null);
-  const [editingPromptId, setEditingPromptId] = useState<string | null>(null);
-  const [promptDraft, setPromptDraft] = useState("");
-  const [savingPromptId, setSavingPromptId] = useState<string | null>(null);
   const [runProgress, setRunProgress] = useState<{ current: number; total: number; promptId?: string; promptText?: string } | null>(null);
   const [streamedResults, setStreamedResults] = useState<PromptAuditResult[]>([]);
   const [catalogBrandRules, setCatalogBrandRules] = useState<CatalogBrandRule[]>([]);
@@ -69,7 +66,7 @@ export function AuditDashboard() {
     grok: "",
   });
 
-  const hasPendingWork = loadingAction !== null || Boolean(savingPromptId);
+  const hasPendingWork = loadingAction !== null;
   const lockedAuditTarget = selectedProduct?.lockedAuditedProvider && selectedProduct?.lockedAuditedModel
     ? {
         provider: selectedProduct.lockedAuditedProvider,
@@ -238,8 +235,6 @@ export function AuditDashboard() {
         setSelectedProduct(null);
         setProductRuns([]);
         setActiveRun(null);
-        setEditingPromptId(null);
-        setPromptDraft("");
         setRunProgress(null);
         setStreamedResults([]);
       }
@@ -268,8 +263,6 @@ export function AuditDashboard() {
       setAuditedModel(product.lockedAuditedModel ?? "");
       setShowPrompts(Boolean(product.promptBank));
       setProductRuns(runs);
-      setEditingPromptId(null);
-      setPromptDraft("");
       setRunProgress(null);
       setStreamedResults([]);
 
@@ -366,8 +359,6 @@ export function AuditDashboard() {
       });
       setSelectedProduct(product);
       setShowPrompts(true);
-      setEditingPromptId(null);
-      setPromptDraft("");
       await refreshProductsList(selectedProductId);
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : "No se pudieron generar los prompts");
@@ -473,40 +464,6 @@ export function AuditDashboard() {
     setProducts(items);
     if (!selectedProductId && items[0]?.productId) {
       setSelectedProductId(preferredProductId ?? items[0].productId);
-    }
-  }
-
-  function startEditingPrompt(promptId: string, prompt: string) {
-    setEditingPromptId(promptId);
-    setPromptDraft(prompt);
-  }
-
-  function cancelPromptEdit() {
-    setEditingPromptId(null);
-    setPromptDraft("");
-  }
-
-  async function handleSavePrompt(promptId: string) {
-    if (!selectedProductId) {
-      return;
-    }
-
-    setSavingPromptId(promptId);
-    setError(null);
-
-    try {
-      const product = await requestJson<SavedProduct>(`/api/products/${selectedProductId}/prompts`, {
-        method: "PATCH",
-        body: JSON.stringify({ promptId, prompt: promptDraft }),
-      });
-      setSelectedProduct(product);
-      setEditingPromptId(null);
-      setPromptDraft("");
-      await refreshProductsList(selectedProductId);
-    } catch (caughtError) {
-      setError(caughtError instanceof Error ? caughtError.message : "No se pudo guardar el prompt");
-    } finally {
-      setSavingPromptId(null);
     }
   }
 
@@ -638,13 +595,13 @@ export function AuditDashboard() {
                     <span>{selectedProduct.promptBank?.prompts.length ?? 0} listos</span>
                   </div>
                   <p className="stage-copy">
-                    Genera el banco del producto, desplegalo y revisa exactamente que 50 consultas se van a usar antes de correr la auditoria.
+                    Genera el banco una sola vez, se guarda fijo y no se modifica. Revisa exactamente esas 50 consultas antes de correr la auditoria.
                   </p>
                   <div className="actions">
-                    <button onClick={handleGeneratePrompts} disabled={hasPendingWork}>
-                      {loadingAction === "prompts" ? "Generando prompts..." : selectedProduct.promptBank ? "Regenerar prompts" : "Generar 50 prompts"}
+                    <button onClick={handleGeneratePrompts} disabled={hasPendingWork || Boolean(selectedProduct.promptBank)}>
+                      {loadingAction === "prompts" ? "Generando prompts..." : selectedProduct.promptBank ? "50 prompts guardados" : "Generar 50 prompts"}
                     </button>
-                    <button onClick={() => setShowPrompts((current) => !current)} disabled={!selectedProduct.promptBank || Boolean(savingPromptId)}>
+                    <button onClick={() => setShowPrompts((current) => !current)} disabled={!selectedProduct.promptBank}>
                       {showPrompts ? "Ocultar prompts" : "Ver 50 prompts"}
                     </button>
                   </div>
@@ -652,33 +609,13 @@ export function AuditDashboard() {
                   {showPrompts && selectedProduct.promptBank ? (
                     <div className="prompt-list prompt-list-long">
                       {selectedProduct.promptBank.prompts.map((prompt) => (
-                        <div key={prompt.id} className={`prompt-row prompt-row-rich${editingPromptId === prompt.id ? " is-editing" : ""}`}>
+                        <div key={prompt.id} className="prompt-row prompt-row-rich">
                           <div className="prompt-badge">
                             <span>{prompt.id}</span>
                             <small>{prompt.type}</small>
                           </div>
                           <div className="prompt-content">
-                            {editingPromptId === prompt.id ? (
-                              <textarea value={promptDraft} onChange={(event) => setPromptDraft(event.target.value)} rows={8} />
-                            ) : (
-                              <p>{prompt.prompt}</p>
-                            )}
-                          </div>
-                          <div className="prompt-actions">
-                            {editingPromptId === prompt.id ? (
-                              <>
-                                <button onClick={() => void handleSavePrompt(prompt.id)} disabled={Boolean(savingPromptId)}>
-                                  {savingPromptId === prompt.id ? "Guardando..." : "Guardar"}
-                                </button>
-                                <button onClick={cancelPromptEdit} disabled={Boolean(savingPromptId)}>
-                                  Cancelar
-                                </button>
-                              </>
-                            ) : (
-                              <button onClick={() => startEditingPrompt(prompt.id, prompt.prompt)} disabled={hasPendingWork}>
-                                Editar
-                              </button>
-                            )}
+                            <p>{prompt.prompt}</p>
                           </div>
                         </div>
                       ))}

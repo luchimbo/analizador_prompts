@@ -5,7 +5,7 @@ import { defaultAuditedModel, executeAuditPrompt } from "@/lib/audit-runner";
 import { judgeExecution } from "@/lib/judge";
 import { buildProductProfile } from "@/lib/product-profiler";
 import { generatePromptBank } from "@/lib/prompt-bank";
-import { deleteProductRecord, getProductRecord, listProductRecords, updateProductAuditLock, updateProductLatestRun, updateProductPrompt, updateProductPromptBank, upsertProductRecord } from "@/lib/product-store";
+import { deleteProductRecord, getProductRecord, listProductRecords, updateProductAuditLock, updateProductLatestRun, updateProductPromptBank, upsertProductRecord } from "@/lib/product-store";
 import { appendRunResult, countRunsByProduct, createRunRecord, finalizeRunRecord, getRun, listRuns, listRunsByProduct } from "@/lib/run-store";
 import type {
   AuditRunRequest,
@@ -97,12 +97,12 @@ export async function generateProductPrompts(productId: string): Promise<SavedPr
     throw new Error("Product not found");
   }
 
+  if (product.promptBank) {
+    return product;
+  }
+
   const promptBank = await generatePromptBank(product.profile, LOCKED_LANGUAGE, LOCKED_MARKET);
   return updateProductPromptBank(productId, promptBank);
-}
-
-export async function updateSavedProductPrompt(productId: string, promptId: string, prompt: string): Promise<SavedProduct> {
-  return updateProductPrompt(productId, promptId, prompt);
 }
 
 export function ensureReadyPromptBank(product: SavedProduct): PromptBank {
