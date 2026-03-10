@@ -191,6 +191,40 @@ export async function updateProductAuditLock(productId: string, auditedProvider:
   return saved;
 }
 
+export async function deleteProductRecord(productId: string): Promise<boolean> {
+  await ensureProductDataHealth();
+  const db = await getDb();
+
+  const existing = await db.execute({
+    sql: `SELECT product_id FROM products WHERE product_id = ? LIMIT 1`,
+    args: [productId],
+  });
+
+  if (!existing.rows.length) {
+    return false;
+  }
+
+  await db.batch(
+    [
+      {
+        sql: `DELETE FROM run_results WHERE run_id IN (SELECT run_id FROM runs WHERE product_id = ?)`,
+        args: [productId],
+      },
+      {
+        sql: `DELETE FROM runs WHERE product_id = ?`,
+        args: [productId],
+      },
+      {
+        sql: `DELETE FROM products WHERE product_id = ?`,
+        args: [productId],
+      },
+    ],
+    "write",
+  );
+
+  return true;
+}
+
 async function ensureProductDataHealth(): Promise<void> {
   if (!globalThis.__iaProductAuditProductRepairPromise__) {
     globalThis.__iaProductAuditProductRepairPromise__ = repairInvalidProductIds();

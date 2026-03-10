@@ -275,6 +275,12 @@ label,
   background: linear-gradient(135deg, var(--accent), var(--accent-deep));
 }
 
+.actions .danger {
+  color: #fff;
+  border-color: transparent;
+  background: linear-gradient(135deg, #b1412a, #7f2a18);
+}
+
 .actions button:disabled {
   opacity: 0.56;
   cursor: not-allowed;

@@ -5,7 +5,7 @@ import { defaultAuditedModel, executeAuditPrompt } from "@/lib/audit-runner";
 import { judgeExecution } from "@/lib/judge";
 import { buildProductProfile } from "@/lib/product-profiler";
 import { generatePromptBank } from "@/lib/prompt-bank";
-import { getProductRecord, listProductRecords, updateProductAuditLock, updateProductLatestRun, updateProductPrompt, updateProductPromptBank, upsertProductRecord } from "@/lib/product-store";
+import { deleteProductRecord, getProductRecord, listProductRecords, updateProductAuditLock, updateProductLatestRun, updateProductPrompt, updateProductPromptBank, upsertProductRecord } from "@/lib/product-store";
 import { appendRunResult, countRunsByProduct, createRunRecord, finalizeRunRecord, getRun, listRuns, listRunsByProduct } from "@/lib/run-store";
 import type {
   AuditRunRequest,
@@ -85,6 +85,10 @@ export async function listProducts(): Promise<ProductListItem[]> {
 
 export async function getProduct(productId: string): Promise<SavedProduct | null> {
   return getProductRecord(productId);
+}
+
+export async function deleteProduct(productId: string): Promise<boolean> {
+  return deleteProductRecord(productId);
 }
 
 export async function generateProductPrompts(productId: string): Promise<SavedProduct> {

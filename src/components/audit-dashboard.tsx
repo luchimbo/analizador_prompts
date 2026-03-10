@@ -184,6 +184,36 @@ export function AuditDashboard() {
     }
   }
 
+  async function handleDeleteProduct() {
+    if (!selectedProductId || !selectedProduct) {
+      return;
+    }
+
+    const confirmed = window.confirm(`Eliminar producto \"${selectedProduct.profile.productName}\" y todas sus corridas?`);
+    if (!confirmed) {
+      return;
+    }
+
+    setLoadingAction("select-product");
+    setError(null);
+
+    try {
+      await requestJson<{ ok: boolean }>(`/api/products/${selectedProductId}`, { method: "DELETE" });
+      setSelectedProductId(null);
+      setSelectedProduct(null);
+      setProductRuns([]);
+      setActiveRun(null);
+      setStreamedResults([]);
+      setRunProgress(null);
+      setShowPrompts(false);
+      await loadProducts();
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : "No se pudo eliminar el producto");
+    } finally {
+      setLoadingAction(null);
+    }
+  }
+
   async function handleGeneratePrompts() {
     if (!selectedProductId) {
       return;
@@ -437,6 +467,11 @@ export function AuditDashboard() {
                 <div className="card-head">
                   <span>Producto seleccionado</span>
                   <span>{selectedProduct.profile.domain}</span>
+                </div>
+                <div className="actions">
+                  <button className="danger" onClick={handleDeleteProduct} disabled={hasPendingWork}>
+                    Eliminar producto
+                  </button>
                 </div>
                 <h2>{selectedProduct.profile.productName}</h2>
                 <p className="subtitle">

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { getProduct } from "@/lib/orchestrator";
+import { deleteProduct, getProduct } from "@/lib/orchestrator";
 
 export const runtime = "nodejs";
 
@@ -11,4 +11,13 @@ export async function GET(_: Request, context: { params: Promise<{ productId: st
     return NextResponse.json({ error: "Product not found" }, { status: 404 });
   }
   return NextResponse.json(product);
+}
+
+export async function DELETE(_: Request, context: { params: Promise<{ productId: string }> }) {
+  const { productId } = await context.params;
+  const deleted = await deleteProduct(productId);
+  if (!deleted) {
+    return NextResponse.json({ error: "Product not found" }, { status: 404 });
+  }
+  return NextResponse.json({ ok: true });
 }
