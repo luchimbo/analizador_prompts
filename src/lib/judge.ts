@@ -1,3 +1,4 @@
+import { classifyAlternativeMentions } from "@/lib/catalog";
 import { env } from "@/lib/env";
 import { openRouterChatJson } from "@/lib/openrouter";
 import type { JudgedMetrics, ProductProfile, PromptExecutionResult } from "@/lib/types";
@@ -11,23 +12,23 @@ You analyze one AI response at a time and return strict JSON only.
 Rules:
 - Product_Hit is 1 only if the target product is positively recommended.
 - Rank is the positive recommendation position of the target product. Use 0 if absent.
-- Product_Competitors is the number of distinct alternative products also recommended positively.
+- Extract alternative product mentions as short product-like strings in alternativeMentions.
+- Ignore generic brand-only mentions in alternativeMentions.
 - Do not guess missing facts.
-- Keep explanations short.
 
 JSON schema:
 {
   "productHit": 0,
-  "productCompetitors": 0,
   "rank": 0,
+  "alternativeMentions": ["string"],
   "evidenceSnippet": "short quote or null",
   "judgeNotes": "brief note"
 }`;
 
 interface JudgePayload {
   productHit?: number;
-  productCompetitors?: number;
   rank?: number;
+  alternativeMentions?: string[];
   evidenceSnippet?: string | null;
   judgeNotes?: string | null;
 }
@@ -44,8 +45,13 @@ export async function judgeExecution({
   const llmMetrics = await judgeWithModel(profile, execution);
   const productHit = Number(llmMetrics.productHit ?? 0);
   const rank = Number(llmMetrics.rank ?? 0);
-  const productCompetitors = Number(llmMetrics.productCompetitors ?? 0);
   const evidenceSnippet = llmMetrics.evidenceSnippet ?? extractEvidence(profile, execution.rawResponse);
+
+  const mentions = uniquePreserveOrder((llmMetrics.alternativeMentions ?? []).map((item) => normalizeWhitespace(item)).filter(Boolean));
+  const alternatives = await classifyAlternativeMentions({
+    mentions,
+    principalAliases: [profile.productName, ...(profile.aliases ?? [])],
+  });
 
   const vendorHit = productHit ? computeVendorHit(profile, execution.rawResponse) : 0;
   const exactUrlAccuracy = productHit ? await computeExactUrlAccuracy(profile, execution.detectedUrls, verifyDetectedUrls) : 0;
@@ -54,8 +60,10 @@ export async function judgeExecution({
     productHit: Math.max(productHit, 0),
     vendorHit,
     exactUrlAccuracy,
-    productCompetitors: Math.max(productCompetitors, 0),
+    internalAlternatives: Math.max(alternatives.internalAlternatives, 0),
+    externalCompetitors: Math.max(alternatives.externalCompetitors, 0),
     rank: Math.max(rank, 0),
+    alternativeMentions: mentions,
     evidenceSnippet,
     judgeProvider: env.openRouterApiKey ? "openrouter" : "heuristic",
     judgeModel: env.openRouterApiKey ? env.openRouterJudgeModel : "rules",
@@ -100,8 +108,8 @@ function judgeWithHeuristics(profile: ProductProfile, execution: PromptExecution
 
   return {
     productHit,
-    productCompetitors: estimateCompetitors(execution.rawResponse, productHit),
     rank: productHit ? estimateRank(execution.rawResponse, aliases) : 0,
+    alternativeMentions: estimateAlternativeMentions(execution.rawResponse, aliases),
     evidenceSnippet: extractEvidence(profile, execution.rawResponse),
     judgeNotes: "Heuristic judge used because OpenRouter judge was unavailable or invalid.",
   };
@@ -169,9 +177,21 @@ function estimateRank(responseText: string, aliases: string[]): number {
   return 1;
 }
 
-function estimateCompetitors(responseText: string, productHit: number): number {
-  const bullets = responseText.split(/\r?\n/).filter((line) => LIST_PATTERN.test(line));
-  return bullets.length ? Math.max(bullets.length - productHit, 0) : 0;
+function estimateAlternativeMentions(responseText: string, aliases: string[]): string[] {
+  const mentions: string[] = [];
+  for (const line of responseText.split(/\r?\n/)) {
+    const match = line.match(LIST_PATTERN);
+    if (!match?.groups?.text) {
+      continue;
+    }
+    const text = normalizeWhitespace(match.groups.text);
+    const lowered = text.toLowerCase();
+    if (aliases.some((alias) => lowered.includes(alias.toLowerCase()))) {
+      continue;
+    }
+    mentions.push(text);
+  }
+  return uniquePreserveOrder(mentions);
 }
 
 function extractEvidence(profile: ProductProfile, responseText: string): string | null {

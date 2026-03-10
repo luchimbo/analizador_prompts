@@ -359,7 +359,8 @@ function buildSummary(results: PromptAuditResult[]): RunSummary {
   const productHits = results.reduce((acc, result) => acc + result.productHit, 0);
   const vendorHits = results.reduce((acc, result) => acc + result.vendorHit, 0);
   const exactHits = results.reduce((acc, result) => acc + result.exactUrlAccuracy, 0);
-  const competitorTotal = results.reduce((acc, result) => acc + result.productCompetitors, 0);
+  const internalTotal = results.reduce((acc, result) => acc + result.internalAlternatives, 0);
+  const externalTotal = results.reduce((acc, result) => acc + result.externalCompetitors, 0);
   const ranks = results.map((result) => result.rank).filter((rank) => rank > 0);
 
   return {
@@ -367,7 +368,8 @@ function buildSummary(results: PromptAuditResult[]): RunSummary {
     productHitRate: total ? round(productHits / total) : 0,
     vendorHitRate: total ? round(vendorHits / total) : 0,
     exactUrlAccuracyRate: total ? round(exactHits / total) : 0,
-    averageCompetitors: total ? round(competitorTotal / total) : 0,
+    averageInternalAlternatives: total ? round(internalTotal / total) : 0,
+    averageExternalCompetitors: total ? round(externalTotal / total) : 0,
     averageRankWhenPresent: ranks.length ? round(ranks.reduce((acc, rank) => acc + rank, 0) / ranks.length) : 0,
   };
 }

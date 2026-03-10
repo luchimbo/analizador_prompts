@@ -64,6 +64,20 @@ export async function ensureDatabaseSchema(): Promise<void> {
           `CREATE INDEX IF NOT EXISTS idx_products_canonical_url ON products(canonical_url)`,
           `CREATE INDEX IF NOT EXISTS idx_products_source_url ON products(source_url)`,
           `
+          CREATE TABLE IF NOT EXISTS catalog_products (
+            sku TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            normalized_name TEXT NOT NULL,
+            brand TEXT,
+            family_tokens_json TEXT NOT NULL,
+            source_sheet TEXT,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            updated_at TEXT NOT NULL
+          )
+          `,
+          `CREATE INDEX IF NOT EXISTS idx_catalog_normalized_name ON catalog_products(normalized_name)`,
+          `CREATE INDEX IF NOT EXISTS idx_catalog_brand ON catalog_products(brand)`,
+          `
           CREATE TABLE IF NOT EXISTS runs (
             run_id TEXT PRIMARY KEY,
             product_id TEXT,
@@ -104,6 +118,9 @@ export async function ensureDatabaseSchema(): Promise<void> {
             product_hit INTEGER NOT NULL,
             vendor_hit INTEGER NOT NULL,
             exact_url_accuracy INTEGER NOT NULL,
+            internal_alternatives INTEGER NOT NULL DEFAULT 0,
+            external_competitors INTEGER NOT NULL DEFAULT 0,
+            alternative_mentions_json TEXT,
             product_competitors INTEGER NOT NULL,
             rank INTEGER NOT NULL,
             evidence_snippet TEXT,
@@ -119,6 +136,9 @@ export async function ensureDatabaseSchema(): Promise<void> {
       )
       .then(async () => {
         await ensureColumn("run_results", "request_id", `ALTER TABLE run_results ADD COLUMN request_id TEXT`);
+        await ensureColumn("run_results", "internal_alternatives", `ALTER TABLE run_results ADD COLUMN internal_alternatives INTEGER NOT NULL DEFAULT 0`);
+        await ensureColumn("run_results", "external_competitors", `ALTER TABLE run_results ADD COLUMN external_competitors INTEGER NOT NULL DEFAULT 0`);
+        await ensureColumn("run_results", "alternative_mentions_json", `ALTER TABLE run_results ADD COLUMN alternative_mentions_json TEXT`);
         await ensureColumn("products", "locked_audited_provider", `ALTER TABLE products ADD COLUMN locked_audited_provider TEXT`);
         await ensureColumn("products", "locked_audited_model", `ALTER TABLE products ADD COLUMN locked_audited_model TEXT`);
         await client.execute(`CREATE INDEX IF NOT EXISTS idx_run_results_request_id ON run_results(request_id)`);

@@ -69,9 +69,10 @@ export async function appendRunResult(runId: string, promptOrder: number, result
         run_id, prompt_order, request_id, prompt_id, prompt_type, prompt_text, raw_response,
         detected_urls_json, cited_urls_json, model_provider, model_name,
         latency_ms, created_at, product_hit, vendor_hit, exact_url_accuracy,
+        internal_alternatives, external_competitors, alternative_mentions_json,
         product_competitors, rank, evidence_snippet, judge_provider,
         judge_model, judge_notes
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     args: [
       runId,
@@ -90,7 +91,10 @@ export async function appendRunResult(runId: string, promptOrder: number, result
       result.productHit,
       result.vendorHit,
       result.exactUrlAccuracy,
-      result.productCompetitors,
+      result.internalAlternatives,
+      result.externalCompetitors,
+      JSON.stringify(result.alternativeMentions ?? []),
+      result.externalCompetitors + result.internalAlternatives,
       result.rank,
       result.evidenceSnippet ?? null,
       result.judgeProvider ?? null,
@@ -224,7 +228,8 @@ function buildSummaryFromResults(results: PromptAuditResult[]): RunSummary {
   const productHits = results.reduce((acc, result) => acc + result.productHit, 0);
   const vendorHits = results.reduce((acc, result) => acc + result.vendorHit, 0);
   const exactHits = results.reduce((acc, result) => acc + result.exactUrlAccuracy, 0);
-  const competitorTotal = results.reduce((acc, result) => acc + result.productCompetitors, 0);
+  const internalTotal = results.reduce((acc, result) => acc + result.internalAlternatives, 0);
+  const externalTotal = results.reduce((acc, result) => acc + result.externalCompetitors, 0);
   const ranks = results.map((result) => result.rank).filter((rank) => rank > 0);
 
   return {
@@ -232,7 +237,8 @@ function buildSummaryFromResults(results: PromptAuditResult[]): RunSummary {
     productHitRate: total ? round(productHits / total) : 0,
     vendorHitRate: total ? round(vendorHits / total) : 0,
     exactUrlAccuracyRate: total ? round(exactHits / total) : 0,
-    averageCompetitors: total ? round(competitorTotal / total) : 0,
+    averageInternalAlternatives: total ? round(internalTotal / total) : 0,
+    averageExternalCompetitors: total ? round(externalTotal / total) : 0,
     averageRankWhenPresent: ranks.length ? round(ranks.reduce((acc, rank) => acc + rank, 0) / ranks.length) : 0,
   };
 }
@@ -253,7 +259,9 @@ function mapRunResultRow(row: Record<string, unknown>): PromptAuditResult {
     productHit: Number(row.product_hit ?? 0),
     vendorHit: Number(row.vendor_hit ?? 0),
     exactUrlAccuracy: Number(row.exact_url_accuracy ?? 0),
-    productCompetitors: Number(row.product_competitors ?? 0),
+    internalAlternatives: Number(row.internal_alternatives ?? 0),
+    externalCompetitors: Number(row.external_competitors ?? row.product_competitors ?? 0),
+    alternativeMentions: parseJson<string[]>(row.alternative_mentions_json, []),
     rank: Number(row.rank ?? 0),
     evidenceSnippet: asNullableString(row.evidence_snippet),
     judgeProvider: asNullableString(row.judge_provider),

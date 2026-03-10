@@ -6,7 +6,9 @@
     "dev": "next dev -p 3002",
     "build": "next build",
     "start": "next start -p 3002",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "import:catalog": "node scripts/import-catalog.mjs",
+    "backfill:alternatives": "node scripts/backfill-alternatives.mjs"
   },
   "dependencies": {
     "@libsql/client": "^0.17.0",

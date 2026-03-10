@@ -74,8 +74,10 @@ export interface JudgedMetrics {
   productHit: number;
   vendorHit: number;
   exactUrlAccuracy: number;
-  productCompetitors: number;
+  internalAlternatives: number;
+  externalCompetitors: number;
   rank: number;
+  alternativeMentions?: string[];
   evidenceSnippet?: string | null;
   judgeProvider?: string | null;
   judgeModel?: string | null;
@@ -89,7 +91,8 @@ export interface RunSummary {
   productHitRate: number;
   vendorHitRate: number;
   exactUrlAccuracyRate: number;
-  averageCompetitors: number;
+  averageInternalAlternatives: number;
+  averageExternalCompetitors: number;
   averageRankWhenPresent: number;
 }
 

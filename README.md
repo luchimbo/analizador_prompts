@@ -14,6 +14,8 @@ Version `Next.js` full-stack para auditar la presencia de un producto dentro de 
 - Juzga cada respuesta con otro modelo independiente.
 - Permite revisar corridas historicas y exportar un `Excel` por run.
 - El mercado queda bloqueado a `Argentina` y el idioma de trabajo a `es` para no mezclar paises en la medicion.
+- El producto queda bloqueado a la primera IA usada para mantener comparables los antes/despues.
+- Las alternativas se desdoblan en `Internal_Alternatives` y `External_Competitors`.
 
 ## Stack
 
@@ -87,6 +89,14 @@ La app queda disponible en `http://127.0.0.1:3002`.
 - `TURSO_DATABASE_URL`: URL de Turso/libSQL. Para local, el default es `file:./data/ia-product-audit.db`.
 - `TURSO_AUTH_TOKEN`: token de Turso. No hace falta para el modo local `file:`.
 - `VERIFY_DETECTED_URLS`: si esta en `true`, intenta resolver redirects al validar URLs.
+
+## Importar catalogo PC MIDI
+
+Para clasificar alternativas internas vs externas, importa el Excel de catalogo a la tabla `catalog_products`:
+
+```bash
+npm run import:catalog -- "_tmp_Productos_1788_20260305 (1).xlsx"
+```
 - `DEFAULT_MARKET`: dejarlo en `Argentina` para mantener el experimento fijo al mismo pais.
 
 ## Notas del MVP

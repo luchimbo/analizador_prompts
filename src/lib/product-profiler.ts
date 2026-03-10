@@ -31,14 +31,14 @@ export async function buildProductProfile(productUrl: string, overrides: Product
   const metaDescription = normalizeWhitespace($("meta[name='description']").attr("content")) || null;
   const ogTitle = normalizeWhitespace($("meta[property='og:title']").attr("content")) || null;
 
-  const productSchema = extractSchemaObject($, "Product");
+  const productSchema = extractBestProductSchema($, [h1, ogTitle, pageTitle]);
   const organizationSchema = extractSchemaObject($, "Organization");
 
   const productName = firstNonEmpty(
     overrides.productName,
-    schemaValue(productSchema, "name"),
-    ogTitle,
     h1,
+    ogTitle,
+    schemaValue(productSchema, "name"),
     pageTitle,
   );
 
@@ -63,7 +63,7 @@ export async function buildProductProfile(productUrl: string, overrides: Product
     canonicalUrl: normalizeUrl(overrides.canonicalUrl ?? canonicalUrl),
     domain,
     productName,
-    brandName: brandName ?? null,
+    brandName: brandName ?? inferBrandFromProductName(productName) ?? null,
     storeName: storeName ?? null,
     category: category ?? null,
     pageTitle,
@@ -75,22 +75,64 @@ export async function buildProductProfile(productUrl: string, overrides: Product
   };
 }
 
+function extractBestProductSchema($: cheerio.CheerioAPI, references: Array<string | null | undefined>): Record<string, unknown> | null {
+  const candidates = extractSchemaObjects($, "Product");
+  if (!candidates.length) {
+    return null;
+  }
+
+  const referenceTokens = tokenizeForMatch(references.join(" "));
+  if (!referenceTokens.length) {
+    return candidates[0];
+  }
+
+  let best = candidates[0];
+  let bestScore = -1;
+  for (const candidate of candidates) {
+    const candidateName = schemaValue(candidate, "name") || "";
+    const candidateTokens = tokenizeForMatch(candidateName);
+    if (!candidateTokens.length) {
+      continue;
+    }
+
+    let score = 0;
+    for (const token of candidateTokens) {
+      if (referenceTokens.includes(token)) {
+        score += 1;
+      }
+    }
+
+    if (score > bestScore) {
+      best = candidate;
+      bestScore = score;
+    }
+  }
+
+  return best;
+}
+
 function extractSchemaObject($: cheerio.CheerioAPI, schemaType: string): Record<string, unknown> | null {
+  const candidates = extractSchemaObjects($, schemaType);
+  return candidates[0] ?? null;
+}
+
+function extractSchemaObjects($: cheerio.CheerioAPI, schemaType: string): Record<string, unknown>[] {
   const scripts = $("script[type='application/ld+json']")
     .toArray()
     .map((element) => $(element).contents().text())
     .filter(Boolean);
 
+  const candidates: Record<string, unknown>[] = [];
   for (const raw of scripts) {
     try {
       const payload = JSON.parse(raw) as unknown;
       for (const candidate of iterateSchemaItems(payload)) {
         const candidateType = candidate["@type"];
         if (Array.isArray(candidateType) && candidateType.includes(schemaType)) {
-          return candidate;
+          candidates.push(candidate);
         }
         if (candidateType === schemaType) {
-          return candidate;
+          candidates.push(candidate);
         }
       }
     } catch {
@@ -98,7 +140,7 @@ function extractSchemaObject($: cheerio.CheerioAPI, schemaType: string): Record<
     }
   }
 
-  return null;
+  return candidates;
 }
 
 function* iterateSchemaItems(payload: unknown): Generator<Record<string, unknown>> {
@@ -187,4 +229,39 @@ function firstNonEmpty(...values: Array<string | null | undefined>): string | un
     }
   }
   return undefined;
+}
+
+function tokenizeForMatch(value: string): string[] {
+  const normalized = normalizeWhitespace(value)
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!normalized) {
+    return [];
+  }
+
+  return normalized.split(" ").filter((token) => token.length > 1);
+}
+
+function inferBrandFromProductName(productName: string): string | undefined {
+  const cleaned = normalizeWhitespace(productName);
+  if (!cleaned) {
+    return undefined;
+  }
+
+  const firstToken = cleaned.split(" ")[0];
+  if (!firstToken) {
+    return undefined;
+  }
+
+  // Ignore purely numeric tokens.
+  if (/^\d+$/.test(firstToken)) {
+    return undefined;
+  }
+
+  return firstToken;
 }

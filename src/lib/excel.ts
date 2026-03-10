@@ -14,8 +14,10 @@ export function buildExcelBuffer(run: AuditRunResponse): Buffer {
     Product_Hit: result.productHit,
     Vendor_Hit: result.vendorHit,
     Exact_URL_Accuracy: result.exactUrlAccuracy,
-    Product_Competitors: result.productCompetitors,
+    Internal_Alternatives: result.internalAlternatives,
+    External_Competitors: result.externalCompetitors,
     Rank: result.rank,
+    Alternative_Mentions: (result.alternativeMentions ?? []).join("\n"),
     Detected_URLs: result.detectedUrls.join("\n"),
     Evidence_Snippet: result.evidenceSnippet ?? "",
     Model_Audited: `${run.auditedProvider}:${run.auditedModel}`,
@@ -34,7 +36,8 @@ export function buildExcelBuffer(run: AuditRunResponse): Buffer {
     { Field: "Product_Hit_Rate", Value: run.summary?.productHitRate ?? 0 },
     { Field: "Vendor_Hit_Rate", Value: run.summary?.vendorHitRate ?? 0 },
     { Field: "Exact_URL_Accuracy_Rate", Value: run.summary?.exactUrlAccuracyRate ?? 0 },
-    { Field: "Average_Competitors", Value: run.summary?.averageCompetitors ?? 0 },
+    { Field: "Average_Internal_Alternatives", Value: run.summary?.averageInternalAlternatives ?? 0 },
+    { Field: "Average_External_Competitors", Value: run.summary?.averageExternalCompetitors ?? 0 },
     { Field: "Average_Rank_When_Present", Value: run.summary?.averageRankWhenPresent ?? 0 },
   ];
 

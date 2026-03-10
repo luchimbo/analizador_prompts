@@ -61,7 +61,8 @@ export function AuditDashboard() {
       { label: "Product Hit", value: `${Math.round(activeRun.summary.productHitRate * 100)}%` },
       { label: "Vendor Hit", value: `${Math.round(activeRun.summary.vendorHitRate * 100)}%` },
       { label: "URL Accuracy", value: `${Math.round(activeRun.summary.exactUrlAccuracyRate * 100)}%` },
-      { label: "Avg Competitors", value: activeRun.summary.averageCompetitors.toFixed(2) },
+      { label: "Avg Internal", value: (activeRun.summary.averageInternalAlternatives ?? 0).toFixed(2) },
+      { label: "Avg External", value: (activeRun.summary.averageExternalCompetitors ?? 0).toFixed(2) },
       { label: "Avg Rank", value: activeRun.summary.averageRankWhenPresent.toFixed(2) },
     ];
   }, [activeRun]);
@@ -659,7 +660,8 @@ export function AuditDashboard() {
                               <span>Hit {result.productHit}</span>
                               <span>Vendor {result.vendorHit}</span>
                               <span>URL {result.exactUrlAccuracy}</span>
-                              <span>Comp {result.productCompetitors}</span>
+                              <span>Int {result.internalAlternatives}</span>
+                              <span>Ext {result.externalCompetitors}</span>
                               <span>Rank {result.rank}</span>
                             </div>
                           </summary>
