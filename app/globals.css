@@ -380,16 +380,27 @@ label,
   gap: 0.9rem;
 }
 
-.detail-grid div {
+.detail-card {
   padding: 0.95rem 1rem;
   border-radius: 20px;
   background: rgba(255, 255, 255, 0.58);
+  min-width: 0;
+}
+
+.detail-card-wide {
+  grid-column: span 2;
 }
 
 .detail-grid p,
 .result-body p,
 .result-body pre {
   margin: 0.35rem 0 0;
+}
+
+.detail-card-canonical p {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.55;
 }
 
 .stage-columns {
@@ -449,13 +460,14 @@ label,
 
 .prompt-content textarea {
   width: 100%;
-  min-height: 118px;
+  min-height: 220px;
   resize: vertical;
   border-radius: 16px;
   border: 1px solid rgba(23, 19, 16, 0.14);
   background: rgba(255, 255, 255, 0.86);
-  padding: 0.9rem 1rem;
+  padding: 1rem 1.1rem;
   color: var(--ink);
+  line-height: 1.6;
 }
 
 .prompt-actions {
@@ -477,6 +489,15 @@ label,
 .prompt-row.is-editing {
   border-color: rgba(200, 107, 44, 0.34);
   background: linear-gradient(135deg, rgba(200, 107, 44, 0.16), rgba(255, 255, 255, 0.56));
+}
+
+.prompt-row.is-editing {
+  grid-template-columns: 100px minmax(0, 1fr);
+}
+
+.prompt-row.is-editing .prompt-actions {
+  grid-column: 2;
+  justify-content: flex-start;
 }
 
 .run-history {

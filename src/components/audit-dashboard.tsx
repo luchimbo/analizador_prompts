@@ -432,15 +432,15 @@ export function AuditDashboard() {
                   {selectedProduct.profile.brandName ?? "Marca no detectada"} · {selectedProduct.profile.storeName ?? "Tienda no detectada"}
                 </p>
                 <div className="detail-grid">
-                  <div>
+                  <div className="detail-card">
                     <small>Categoria</small>
                     <p>{selectedProduct.profile.category ?? "No detectada"}</p>
                   </div>
-                  <div>
+                  <div className="detail-card detail-card-wide detail-card-canonical">
                     <small>Canonical</small>
                     <p>{selectedProduct.profile.canonicalUrl}</p>
                   </div>
-                  <div>
+                  <div className="detail-card">
                     <small>Ultima actualizacion</small>
                     <p>{formatDate(selectedProduct.updatedAt)}</p>
                   </div>
@@ -475,7 +475,7 @@ export function AuditDashboard() {
                           </div>
                           <div className="prompt-content">
                             {editingPromptId === prompt.id ? (
-                              <textarea value={promptDraft} onChange={(event) => setPromptDraft(event.target.value)} rows={4} />
+                              <textarea value={promptDraft} onChange={(event) => setPromptDraft(event.target.value)} rows={8} />
                             ) : (
                               <p>{prompt.prompt}</p>
                             )}
