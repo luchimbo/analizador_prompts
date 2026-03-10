@@ -85,7 +85,6 @@ La app queda disponible en `http://127.0.0.1:3002`.
 - `OPENROUTER_OPENAI_AUDIT_MODEL`: slug por defecto para auditar OpenAI via OpenRouter.
 - `OPENROUTER_GEMINI_AUDIT_MODEL`: slug por defecto para auditar Gemini via OpenRouter.
 - `OPENROUTER_GROK_AUDIT_MODEL`: slug por defecto para auditar Grok via OpenRouter.
-- `OPENROUTER_KIMI_AUDIT_MODEL`: alias legacy opcional, se usa como fallback para Grok si no definis `OPENROUTER_GROK_AUDIT_MODEL`.
 - `OPENROUTER_WEB_PLUGIN_ID`: plugin de web search que se adjunta cuando `enableWebSearch=true`.
 - `TURSO_DATABASE_URL`: URL de Turso/libSQL. Para local, el default es `file:./data/ia-product-audit.db`.
 - `TURSO_AUTH_TOKEN`: token de Turso. No hace falta para el modo local `file:`.
