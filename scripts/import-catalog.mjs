@@ -36,13 +36,101 @@ function normalizeText(value) {
     .trim();
 }
 
+const BRAND_ALIASES = [
+  ["midiplus", ["midiplus", "midi plus"]],
+  ["arturia", ["arturia"]],
+  ["meike", ["meike"]],
+  ["korg", ["korg"]],
+  ["novation", ["novation"]],
+  ["akai", ["akai", "akai professional"]],
+  ["behringer", ["behringer"]],
+  ["m-audio", ["m-audio", "maudio"]],
+  ["focusrite", ["focusrite"]],
+  ["alesis", ["alesis"]],
+  ["casio", ["casio"]],
+  ["yamaha", ["yamaha"]],
+  ["roland", ["roland"]],
+  ["nux", ["nux"]],
+  ["mooer", ["mooer"]],
+  ["fender", ["fender"]],
+  ["marshall", ["marshall"]],
+  ["shure", ["shure"]],
+  ["audio-technica", ["audio technica", "audio-technica"]],
+  ["sennheiser", ["sennheiser"]],
+  ["jbl", ["jbl"]],
+  ["krk", ["krk"]],
+];
+
+const GENERIC_TOKENS = new Set([
+  "auriculares",
+  "auricular",
+  "teclado",
+  "teclados",
+  "controlador",
+  "midi",
+  "musical",
+  "microfono",
+  "microfonos",
+  "monitor",
+  "monitores",
+  "parlante",
+  "parlantes",
+  "interfaz",
+  "interface",
+  "cable",
+  "pedal",
+  "guitarra",
+  "bajo",
+  "bateria",
+  "drum",
+  "audio",
+  "usb",
+  "linea",
+  "activo",
+  "activa",
+  "combo",
+  "kit",
+  "pack",
+  "nvo",
+  "nuevo",
+  "black",
+  "white",
+  "pro",
+  "mini",
+]);
+
 function inferBrand(name) {
   const normalized = normalizeText(name);
-  const tokens = normalized.split(" ").filter(Boolean);
-  if (!tokens.length) {
+  if (!normalized) {
     return null;
   }
-  return tokens[0];
+
+  let bestMatch = null;
+  for (const [brand, aliases] of BRAND_ALIASES) {
+    for (const alias of aliases) {
+      const normalizedAlias = normalizeText(alias);
+      if (!normalizedAlias) continue;
+      const padded = ` ${normalized} `;
+      if (padded.includes(` ${normalizedAlias} `)) {
+        if (!bestMatch || normalizedAlias.length > bestMatch.aliasLength) {
+          bestMatch = { brand, aliasLength: normalizedAlias.length };
+        }
+      }
+    }
+  }
+
+  if (bestMatch) {
+    return bestMatch.brand;
+  }
+
+  const tokens = normalized.split(" ").filter(Boolean);
+  for (const token of tokens.slice(0, 3)) {
+    if (token.length < 3) continue;
+    if (GENERIC_TOKENS.has(token)) continue;
+    return token;
+  }
+
+  return null;
 }
 
 function buildFamilyTokens(name) {
