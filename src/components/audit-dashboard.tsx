@@ -750,7 +750,7 @@ export function AuditDashboard() {
                       >
                         {providers.map((provider) => (
                           <option key={provider.value} value={provider.value}>
-                            {provider.label}
+                            {formatProviderOptionLabel(provider.value, defaultModels)}
                           </option>
                         ))}
                       </select>
@@ -768,8 +768,13 @@ export function AuditDashboard() {
                   </div>
 
                   <p className="stage-copy">
-                    Modelo por defecto para {auditedProvider}: <strong>{defaultModels[auditedProvider] || "(sin configurar)"}</strong>
-                    {auditedProvider === "gemini" ? " (Gemini se fuerza desde .env)" : ""}
+                    {auditedProvider === "gemini"
+                      ? <>
+                          Modelo configurado en <strong>.env</strong> para Gemini: <strong>{defaultModels.gemini || "(sin configurar)"}</strong>
+                        </>
+                      : <>
+                          Modelo por defecto para {auditedProvider}: <strong>{defaultModels[auditedProvider] || "(sin configurar)"}</strong>
+                        </>}
                   </p>
 
                   <div className="actions">
@@ -1134,6 +1139,15 @@ function normalizeDisplayedModel(
     return defaults?.gemini || trimmed;
   }
   return trimmed;
+}
+
+function formatProviderOptionLabel(provider: ProviderValue, defaults: Partial<Record<ProviderValue, string>>): string {
+  const label = formatProviderLabel(provider);
+  const model = defaults[provider]?.trim();
+  if (!model || provider === "custom") {
+    return label;
+  }
+  return `${label} - ${model}`;
 }
 
 function formatProviderLabel(provider: string | null | undefined): string {
