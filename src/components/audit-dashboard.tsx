@@ -210,7 +210,8 @@ export function AuditDashboard() {
       cache: "no-store",
     });
 
-    const data = (await response.json()) as T & { error?: string };
+    const raw = await response.text();
+    const data = raw ? (JSON.parse(raw) as T & { error?: string }) : ({} as T & { error?: string });
     if (!response.ok) {
       throw new Error(data.error ?? "Request failed");
     }
@@ -287,7 +288,7 @@ export function AuditDashboard() {
     }
   }
 
-  async function loadProducts(preferredProductId?: string) {
+  async function loadProducts(preferredProductId?: string | null) {
     setLoadingAction((current) => (current === null ? "boot" : current));
     setError(null);
 
@@ -295,7 +296,9 @@ export function AuditDashboard() {
       const items = await requestJson<ProductListItem[]>("/api/products", { method: "GET" });
       setProducts(items);
 
-      const nextProductId = preferredProductId ?? selectedProductId ?? items[0]?.productId ?? null;
+      const nextProductId = preferredProductId === undefined
+        ? (selectedProductId ?? items[0]?.productId ?? null)
+        : (preferredProductId ?? items[0]?.productId ?? null);
       if (nextProductId) {
         await loadProductWorkspace(nextProductId);
       } else {
@@ -412,7 +415,7 @@ export function AuditDashboard() {
       setStreamedResults([]);
       setRunProgress(null);
       setShowPrompts(false);
-      await loadProducts();
+      await loadProducts(null);
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : "No se pudo eliminar el producto");
     } finally {
