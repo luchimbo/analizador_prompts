@@ -47,8 +47,8 @@ export function buildExcelBuffer(run: AuditRunResponse): Buffer {
     { Field: "Score_Rank_Points", Value: run.summary?.scoreBreakdown.rankPoints ?? 0 },
     { Field: "Score_Exact_URL_Points", Value: run.summary?.scoreBreakdown.exactUrlPoints ?? 0 },
     { Field: "Score_Vendor_Points", Value: run.summary?.scoreBreakdown.vendorPoints ?? 0 },
-    { Field: "Score_External_Pressure_Points", Value: run.summary?.scoreBreakdown.externalPressurePoints ?? 0 },
-    { Field: "Score_Internal_Pressure_Points", Value: run.summary?.scoreBreakdown.internalPressurePoints ?? 0 },
+    { Field: "Score_External_Penalty_Points", Value: run.summary?.scoreBreakdown.externalPenaltyPoints ?? 0 },
+    { Field: "Score_Internal_Bonus_Points", Value: run.summary?.scoreBreakdown.internalBonusPoints ?? 0 },
   ];
 
   XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(detailRows), "Prompt Detail");

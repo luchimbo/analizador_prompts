@@ -74,25 +74,29 @@ export function buildRunSummary(results: PromptAuditResult[]): RunSummary {
   const averageExternalCompetitors = total ? round(externalTotal / total) : 0;
   const averageRankWhenPresent = ranks.length ? round(ranks.reduce((acc, rank) => acc + rank, 0) / ranks.length) : 0;
   const rankQualityRate = total ? round(results.reduce((acc, result) => acc + normalizeRank(result.rank), 0) / total) : 0;
-  const externalPressureRate = clamp01(1 - averageExternalCompetitors / 4);
-  const internalPressureRate = clamp01(1 - averageInternalAlternatives / 4);
+  const internalBonusPoints = round(clamp01(averageInternalAlternatives / 2) * 15);
+  const externalPenaltyPoints = round(clamp01(averageExternalCompetitors / 2) * -15);
 
   const scoreBreakdown: RunScoreBreakdown = {
-    productHitPoints: round(productHitRate * 40),
-    rankPoints: round(rankQualityRate * 20),
-    exactUrlPoints: round(exactUrlAccuracyRate * 15),
-    vendorPoints: round(vendorHitRate * 10),
-    externalPressurePoints: round(externalPressureRate * 10),
-    internalPressurePoints: round(internalPressureRate * 5),
+    productHitPoints: round(productHitRate * 30),
+    rankPoints: round(rankQualityRate * 10),
+    exactUrlPoints: round(exactUrlAccuracyRate * 25),
+    vendorPoints: round(vendorHitRate * 35),
+    externalPenaltyPoints,
+    internalBonusPoints,
   };
 
   const overallScore = round(
-    scoreBreakdown.productHitPoints +
-      scoreBreakdown.rankPoints +
-      scoreBreakdown.exactUrlPoints +
-      scoreBreakdown.vendorPoints +
-      scoreBreakdown.externalPressurePoints +
-      scoreBreakdown.internalPressurePoints,
+    clampScore(
+      scoreBreakdown.productHitPoints +
+        scoreBreakdown.rankPoints +
+        scoreBreakdown.exactUrlPoints +
+        scoreBreakdown.vendorPoints +
+        scoreBreakdown.externalPenaltyPoints +
+        scoreBreakdown.internalBonusPoints,
+      0,
+      100,
+    ),
   );
 
   return {
@@ -113,7 +117,12 @@ export function ensureRunSummary(summary: RunSummary | null | undefined, results
   if (!summary) {
     return results.length ? buildRunSummary(results) : null;
   }
-  if (typeof summary.overallScore !== "number" || !summary.scoreBreakdown) {
+  if (
+    typeof summary.overallScore !== "number" ||
+    !summary.scoreBreakdown ||
+    typeof summary.scoreBreakdown.externalPenaltyPoints !== "number" ||
+    typeof summary.scoreBreakdown.internalBonusPoints !== "number"
+  ) {
     return results.length ? buildRunSummary(results) : { ...summary, overallScore: 0, scoreLabel: classifyScore(0), scoreBreakdown: emptyBreakdown() };
   }
   return summary;
@@ -123,8 +132,14 @@ function normalizeRank(rank: number): number {
   if (!Number.isFinite(rank) || rank <= 0) {
     return 0;
   }
-  const bounded = Math.min(Math.round(rank), 10);
-  return round((11 - bounded) / 10);
+  const bounded = Math.round(rank);
+  if (bounded === 1) {
+    return 1;
+  }
+  if (bounded === 2) {
+    return 0.5;
+  }
+  return 0;
 }
 
 function classifyScore(score: number): string {
@@ -149,13 +164,17 @@ function emptyBreakdown(): RunScoreBreakdown {
     rankPoints: 0,
     exactUrlPoints: 0,
     vendorPoints: 0,
-    externalPressurePoints: 0,
-    internalPressurePoints: 0,
+    externalPenaltyPoints: 0,
+    internalBonusPoints: 0,
   };
 }
 
 function clamp01(value: number): number {
   return Math.max(0, Math.min(1, value));
+}
+
+function clampScore(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
 }
 
 function round(value: number): number {

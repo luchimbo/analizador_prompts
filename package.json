@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start -p 3002",
     "typecheck": "tsc --noEmit",
+    "test:scoring": "node scripts/test-scoring.mjs",
     "import:catalog": "node scripts/import-catalog.mjs",
     "backfill:alternatives": "node scripts/backfill-alternatives.mjs"
   },

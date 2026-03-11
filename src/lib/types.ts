@@ -110,8 +110,8 @@ export interface RunScoreBreakdown {
   rankPoints: number;
   exactUrlPoints: number;
   vendorPoints: number;
-  externalPressurePoints: number;
-  internalPressurePoints: number;
+  externalPenaltyPoints: number;
+  internalBonusPoints: number;
 }
 
 export interface RunSummary {

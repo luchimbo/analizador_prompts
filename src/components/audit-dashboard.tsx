@@ -885,7 +885,7 @@ export function AuditDashboard() {
                       </div>
                       {activeRun.summary ? (
                         <p className="stage-copy">
-                          {`Score breakdown: Hit ${activeRun.summary.scoreBreakdown.productHitPoints.toFixed(2)} · Rank ${activeRun.summary.scoreBreakdown.rankPoints.toFixed(2)} · URL ${activeRun.summary.scoreBreakdown.exactUrlPoints.toFixed(2)} · Vendor ${activeRun.summary.scoreBreakdown.vendorPoints.toFixed(2)} · Ext ${activeRun.summary.scoreBreakdown.externalPressurePoints.toFixed(2)} · Int ${activeRun.summary.scoreBreakdown.internalPressurePoints.toFixed(2)}`}
+                          {`Score breakdown: Product ${activeRun.summary.scoreBreakdown.productHitPoints.toFixed(2)} · Vendor ${activeRun.summary.scoreBreakdown.vendorPoints.toFixed(2)} · URL ${activeRun.summary.scoreBreakdown.exactUrlPoints.toFixed(2)} · Rank ${activeRun.summary.scoreBreakdown.rankPoints.toFixed(2)} · Bonus +${activeRun.summary.scoreBreakdown.internalBonusPoints.toFixed(2)} · Penalty -${Math.abs(activeRun.summary.scoreBreakdown.externalPenaltyPoints).toFixed(2)}`}
                         </p>
                       ) : null}
                     </>
