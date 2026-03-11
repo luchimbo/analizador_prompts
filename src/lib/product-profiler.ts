@@ -1,5 +1,6 @@
 import * as cheerio from "cheerio";
 
+import { buildProductAliases } from "@/lib/product-aliases";
 import type { ProductProfile, ProductProfileOverrides } from "@/lib/types";
 import { hostToStoreName, normalizeUrl, normalizeWhitespace, uniquePreserveOrder } from "@/lib/utils";
 
@@ -50,7 +51,7 @@ export async function buildProductProfile(productUrl: string, overrides: Product
   const storeName = firstNonEmpty(overrides.storeName, schemaValue(organizationSchema, "name"), hostToStoreName(domain));
   const category = firstNonEmpty(overrides.category, schemaValue(productSchema, "category"), extractBreadcrumbCategory($));
 
-  const aliases = buildAliases(productName, brandName ?? undefined, overrides.aliases ?? []);
+  const aliases = buildProductAliases(productName, brandName ?? undefined, overrides.aliases ?? []);
   const vendorAliases = uniquePreserveOrder([...(overrides.vendorAliases ?? []), storeName ?? "", brandName ?? ""]);
   const competitorNames = uniquePreserveOrder(overrides.competitorNames ?? []);
 
@@ -209,16 +210,6 @@ function extractBreadcrumbCategory($: cheerio.CheerioAPI): string | undefined {
     .filter(Boolean);
 
   return items.length >= 2 ? items[items.length - 2] : undefined;
-}
-
-function buildAliases(productName: string, brandName: string | undefined, manualAliases: string[]): string[] {
-  const candidates = [productName];
-  if (brandName && productName.toLowerCase().startsWith(brandName.toLowerCase())) {
-    candidates.push(productName.slice(brandName.length).trim().replace(/^[-\s]+/, ""));
-  }
-  candidates.push(productName.replace(/-/g, " "));
-  candidates.push(...manualAliases);
-  return uniquePreserveOrder(candidates);
 }
 
 function firstNonEmpty(...values: Array<string | null | undefined>): string | undefined {

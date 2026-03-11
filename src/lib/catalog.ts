@@ -1,4 +1,5 @@
 import { getDb } from "@/lib/db";
+import { buildProductAliases } from "@/lib/product-aliases";
 import type { AlternativeClassification } from "@/lib/types";
 import { normalizeWhitespace } from "@/lib/utils";
 
@@ -339,8 +340,8 @@ export async function reclassifyHistoricalRunResults(): Promise<{ updated: numbe
       continue;
     }
 
-    const profile = parseJson<{ productName?: string; aliases?: string[]; storeName?: string; vendorAliases?: string[] }>(row.product_profile_json, {});
-    const principalAliases = [profile.productName ?? "", ...(Array.isArray(profile.aliases) ? profile.aliases : [])].filter(Boolean);
+    const profile = parseJson<{ productName?: string; brandName?: string; aliases?: string[]; storeName?: string; vendorAliases?: string[] }>(row.product_profile_json, {});
+    const principalAliases = buildProductAliases(profile.productName ?? "", profile.brandName ?? null, Array.isArray(profile.aliases) ? profile.aliases : []);
     const ignoredAliases = [profile.storeName ?? "", ...(Array.isArray(profile.vendorAliases) ? profile.vendorAliases : []), "Mercado Libre", "Musicamia", "TodoMusica", "MasMusica"].filter(Boolean);
 
     const parsedMentions = parseJson<string[]>(row.alternative_mentions_json, [])

@@ -1,6 +1,7 @@
 import { classifyAlternativeMentions } from "@/lib/catalog";
 import { env } from "@/lib/env";
 import { openRouterChatJson } from "@/lib/openrouter";
+import { buildProductAliases, extractProductModelTokens } from "@/lib/product-aliases";
 import type { JudgedMetrics, ProductProfile, PromptExecutionResult, ScoringReasons } from "@/lib/types";
 import { clip, normalizeUrl, normalizeWhitespace, uniquePreserveOrder } from "@/lib/utils";
 
@@ -10,8 +11,11 @@ const JUDGE_SYSTEM_PROMPT = `You are a strict evaluator for a product visibility
 You analyze one AI response at a time and return strict JSON only.
 
 Rules:
-- Product_Hit is 1 only if the target product is positively recommended.
-- Rank is the positive recommendation position of the target product. Use 0 if absent.
+- Product_Hit is 1 if the target product is explicitly mentioned as a relevant answer.
+- A direct descriptive answer about the exact target product also counts, even without explicit recommendation wording.
+- targetProductMentioned is 1 if the response is clearly talking about the target product.
+- exactModelMatch is 1 only when the response refers to the exact same model or variant as the target product, not sibling models from the same brand.
+- Rank is the first position where the target product appears as a relevant answer. Use 0 if absent.
 - Extract alternative product mentions as short product-like strings in alternativeMentions.
 - Extract explicit alternative brand mentions in brandMentions, including brand-only mentions when they refer to competing or alternative brands.
 - Exclude stores, marketplaces, retailers, and generic product categories from brandMentions.
@@ -20,20 +24,26 @@ Rules:
 JSON schema:
 {
   "productHit": 0,
+  "targetProductMentioned": 0,
+  "exactModelMatch": 0,
   "rank": 0,
   "alternativeMentions": ["string"],
   "brandMentions": ["string"],
   "evidenceSnippet": "short quote or null",
-  "judgeNotes": "brief note"
+  "judgeNotes": "brief note",
+  "confidence": 0
 }`;
 
 interface JudgePayload {
   productHit?: number;
+  targetProductMentioned?: number;
+  exactModelMatch?: number;
   rank?: number;
   alternativeMentions?: string[];
   brandMentions?: string[];
   evidenceSnippet?: string | null;
   judgeNotes?: string | null;
+  confidence?: number;
 }
 
 export async function judgeExecution({
@@ -46,19 +56,33 @@ export async function judgeExecution({
   verifyDetectedUrls?: boolean;
 }): Promise<JudgedMetrics> {
   const llmMetrics = await judgeWithModel(profile, execution);
-  const heuristicHit = computeHeuristicProductHit(profile, execution.rawResponse);
-  const heuristicRank = heuristicHit ? estimateRank(execution.rawResponse, [profile.productName, ...profile.aliases]) : 0;
+  const principalAliases = getPrincipalAliases(profile);
+  const modelTokens = getPrincipalModelTokens(profile, principalAliases);
+  const heuristicHit = computeHeuristicProductHit(principalAliases, execution.rawResponse);
+  const heuristicCoverageHit = heuristicHit ? computeHeuristicProductCoverage(principalAliases, execution.rawResponse) : 0;
+  const heuristicExactModelMatch = computeHeuristicExactModelMatch(modelTokens, principalAliases, execution.rawResponse);
+  const heuristicRank = heuristicHit ? estimateRank(execution.rawResponse, principalAliases) : 0;
   const llmHit = Number(llmMetrics.productHit ?? 0);
+  const llmTargetMention = Number(llmMetrics.targetProductMentioned ?? llmMetrics.productHit ?? 0);
+  const llmExactModelMatch = Number(llmMetrics.exactModelMatch ?? 0);
   const llmRank = Number(llmMetrics.rank ?? 0);
-  const productHit = llmHit === 1 && heuristicHit === 1 ? 1 : 0;
-  const rank = productHit ? clampRank(Math.min(llmRank || heuristicRank, heuristicRank || llmRank), 1, 50) : 0;
+  const productHit = resolveProductHit({
+    heuristicHit,
+    heuristicCoverageHit,
+    heuristicExactModelMatch,
+    llmHit,
+    llmTargetMention,
+    llmExactModelMatch,
+    modelTokens,
+  });
+  const rank = productHit ? clampRank(llmRank || heuristicRank || 1, 1, 50) : 0;
   const evidenceSnippet = llmMetrics.evidenceSnippet ?? extractEvidence(profile, execution.rawResponse);
 
   const mentions = uniquePreserveOrder((llmMetrics.alternativeMentions ?? []).map((item) => normalizeWhitespace(item)).filter(Boolean));
   const brandMentions = uniquePreserveOrder((llmMetrics.brandMentions ?? []).map((item) => normalizeWhitespace(item)).filter(Boolean));
   const alternatives = await classifyAlternativeMentions({
     mentions: uniquePreserveOrder([...mentions, ...brandMentions]),
-    principalAliases: [profile.productName, ...(profile.aliases ?? [])],
+    principalAliases,
     ignoredAliases: [profile.storeName ?? "", ...(profile.vendorAliases ?? []), "Mercado Libre", "Musicamia", "TodoMusica", "MasMusica"],
     responseText: execution.rawResponse,
   });
@@ -68,12 +92,14 @@ export async function judgeExecution({
   const scoringReasons: ScoringReasons = {
     productHitReason:
       productHit === 1
-        ? "Coincidencia estricta entre juez y heuristica: el producto objetivo aparece recomendado de forma explicita."
-        : "No hubo coincidencia estricta entre juez y heuristica para recomendacion explicita del producto objetivo.",
+        ? llmTargetMention === 1 && (llmExactModelMatch === 1 || heuristicExactModelMatch === 1)
+          ? "La IA juez y las validaciones locales coinciden en que la respuesta habla del modelo exacto del producto objetivo."
+          : "Las validaciones locales detectaron una mencion sustantiva del producto objetivo con coincidencia suficiente de modelo."
+        : "No se detecto una aparicion valida del producto objetivo en la respuesta.",
     rankReason:
       rank > 0
-        ? `Rank asignado por consenso estricto (juez/heuristica): ${rank}.`
-        : "Sin recomendacion explicita del producto objetivo, rank se fija en 0.",
+        ? `Rank asignado por primera aparicion valida del producto objetivo: ${rank}.`
+        : "Sin aparicion valida del producto objetivo, rank se fija en 0.",
     vendorHitReason:
       vendorHit === 1
         ? "Se detecto una referencia explicita a la tienda/proveedor junto con recomendacion valida del producto."
@@ -115,7 +141,8 @@ async function judgeWithModel(profile: ProductProfile, execution: PromptExecutio
           productName: profile.productName,
           brandName: profile.brandName,
           storeName: profile.storeName,
-          aliases: profile.aliases,
+          aliases: getPrincipalAliases(profile),
+          modelTokens: getPrincipalModelTokens(profile, getPrincipalAliases(profile)),
           vendorAliases: profile.vendorAliases,
           prompt: execution.promptText,
           response: execution.rawResponse,
@@ -132,16 +159,21 @@ async function judgeWithModel(profile: ProductProfile, execution: PromptExecutio
 }
 
 function judgeWithHeuristics(profile: ProductProfile, execution: PromptExecutionResult): JudgePayload {
-  const aliases = uniquePreserveOrder([profile.productName, ...profile.aliases]);
-  const productHit = computeHeuristicProductHit(profile, execution.rawResponse);
+  const aliases = getPrincipalAliases(profile);
+  const modelTokens = getPrincipalModelTokens(profile, aliases);
+  const productHit = computeHeuristicProductHit(aliases, execution.rawResponse);
+  const exactModelMatch = computeHeuristicExactModelMatch(modelTokens, aliases, execution.rawResponse);
 
   return {
     productHit,
+    targetProductMentioned: productHit,
+    exactModelMatch,
     rank: productHit ? estimateRank(execution.rawResponse, aliases) : 0,
     alternativeMentions: estimateAlternativeMentions(execution.rawResponse, aliases),
     brandMentions: [],
     evidenceSnippet: extractEvidence(profile, execution.rawResponse),
     judgeNotes: "Heuristic judge used because OpenRouter judge was unavailable or invalid.",
+    confidence: exactModelMatch ? 0.75 : productHit ? 0.55 : 0.25,
   };
 }
 
@@ -256,7 +288,7 @@ function estimateAlternativeMentions(responseText: string, aliases: string[]): s
 }
 
 function extractEvidence(profile: ProductProfile, responseText: string): string | null {
-  const aliases = uniquePreserveOrder([profile.productName, ...profile.aliases]);
+  const aliases = getPrincipalAliases(profile);
   const normalizedAliases = aliases.map((alias) => normalizeForMatch(alias)).filter(Boolean);
   const compactAliases = normalizedAliases.map((alias) => compactForMatch(alias));
   for (const line of responseText.split(/\r?\n/)) {
@@ -270,11 +302,98 @@ function extractEvidence(profile: ProductProfile, responseText: string): string 
   return null;
 }
 
-function computeHeuristicProductHit(profile: ProductProfile, responseText: string): number {
-  const aliases = uniquePreserveOrder([profile.productName, ...profile.aliases]);
+function computeHeuristicProductHit(aliases: string[], responseText: string): number {
   const normalizedText = normalizeForMatch(responseText);
   const compactText = compactForMatch(normalizedText);
   return aliases.some((alias) => aliasMatchesText(alias, normalizedText, compactText)) ? 1 : 0;
+}
+
+function computeHeuristicProductCoverage(aliases: string[], responseText: string): number {
+  const segments = responseText
+    .split(/\r?\n|(?<=[.!?])\s+/)
+    .map((item) => normalizeWhitespace(item))
+    .filter(Boolean);
+
+  for (const segment of segments) {
+    const normalizedSegment = normalizeForMatch(segment);
+    const compactSegment = compactForMatch(normalizedSegment);
+    if (!aliases.some((alias) => aliasMatchesText(alias, normalizedSegment, compactSegment))) {
+      continue;
+    }
+
+    if (isSubstantiveProductSegment(normalizedSegment)) {
+      return 1;
+    }
+  }
+
+  return 0;
+}
+
+function getPrincipalAliases(profile: ProductProfile): string[] {
+  return buildProductAliases(profile.productName, profile.brandName, profile.aliases ?? []);
+}
+
+function getPrincipalModelTokens(profile: ProductProfile, aliases: string[]): string[] {
+  return extractProductModelTokens(profile.productName, aliases);
+}
+
+function computeHeuristicExactModelMatch(modelTokens: string[], aliases: string[], responseText: string): number {
+  if (!modelTokens.length) {
+    return computeHeuristicProductHit(aliases, responseText);
+  }
+
+  const normalizedText = normalizeForMatch(responseText);
+  const compactText = compactForMatch(normalizedText);
+  return modelTokens.some((token) => aliasMatchesText(token, normalizedText, compactText)) ? 1 : 0;
+}
+
+function resolveProductHit({
+  heuristicHit,
+  heuristicCoverageHit,
+  heuristicExactModelMatch,
+  llmHit,
+  llmTargetMention,
+  llmExactModelMatch,
+  modelTokens,
+}: {
+  heuristicHit: number;
+  heuristicCoverageHit: number;
+  heuristicExactModelMatch: number;
+  llmHit: number;
+  llmTargetMention: number;
+  llmExactModelMatch: number;
+  modelTokens: string[];
+}): number {
+  if (heuristicHit !== 1) {
+    return 0;
+  }
+
+  const exactModelConfirmed = modelTokens.length === 0 ? 1 : Number(llmExactModelMatch === 1 || heuristicExactModelMatch === 1);
+  const relevantMentionConfirmed = Number(llmHit === 1 || llmTargetMention === 1 || heuristicCoverageHit === 1);
+  return exactModelConfirmed === 1 && relevantMentionConfirmed === 1 ? 1 : 0;
+}
+
+function isSubstantiveProductSegment(normalizedSegment: string): boolean {
+  if (!normalizedSegment) {
+    return false;
+  }
+
+  const negativePatterns = [
+    /\bno (?:encontre|encontramos|encontro|hay|hubo|tengo|tenemos|cuento con|dispongo de|se encontro|se encontraron|se hallaron)\b/,
+    /\bsin (?:informacion|datos|detalle|detalles|resenas|evidencia)\b/,
+    /\bdesconozco\b/,
+    /\bno puedo (?:confirmar|asegurar|validar)\b/,
+  ];
+  if (negativePatterns.some((pattern) => pattern.test(normalizedSegment))) {
+    return false;
+  }
+
+  const descriptivePattern = /\b(?:es|son|incluye|incluyen|cuenta|cuentan|tiene|tienen|ofrece|ofrecen|permite|permiten|sirve|sirven|destaca|destacan|viene|vienen|funciona|funcionan|ideal|recomendado|recomendada|recomendable)\b/;
+  if (descriptivePattern.test(normalizedSegment)) {
+    return true;
+  }
+
+  return normalizedSegment.split(" ").filter(Boolean).length >= 8;
 }
 
 function aliasMatchesText(alias: string, normalizedText: string, compactText: string, precomputedCompactAlias?: string): boolean {
