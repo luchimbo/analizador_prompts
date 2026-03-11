@@ -1,6 +1,12 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
+const DEFAULT_GEMINI_MODEL = "google/gemini-2.5-flash-lite:online";
+const LEGACY_GEMINI_MODELS = new Set([
+  "google/gemini-2.5-pro",
+  "google/gemini-2.5-pro:online",
+]);
+
 const env = {
   appName: process.env.APP_NAME ?? "IA Product Audit",
   requestTimeoutSeconds: Number(process.env.REQUEST_TIMEOUT_SECONDS ?? "60"),
@@ -14,10 +20,10 @@ const env = {
   tursoAuthToken: process.env.TURSO_AUTH_TOKEN ?? "",
   openRouterApiKey: process.env.OPENROUTER_API_KEY ?? "",
   openRouterBaseUrl: process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1",
-  openRouterGeneratorModel: process.env.OPENROUTER_GENERATOR_MODEL ?? "google/gemini-2.5-flash-lite:online",
+  openRouterGeneratorModel: process.env.OPENROUTER_GENERATOR_MODEL ?? DEFAULT_GEMINI_MODEL,
   openRouterJudgeModel: process.env.OPENROUTER_JUDGE_MODEL ?? "moonshotai/kimi-k2",
   openRouterOpenAiAuditModel: process.env.OPENROUTER_OPENAI_AUDIT_MODEL ?? "openai/gpt-4.1-mini",
-  openRouterGeminiAuditModel: process.env.OPENROUTER_GEMINI_AUDIT_MODEL ?? "google/gemini-2.5-flash-lite:online",
+  openRouterGeminiAuditModel: process.env.OPENROUTER_GEMINI_AUDIT_MODEL ?? DEFAULT_GEMINI_MODEL,
   openRouterWebPluginId: process.env.OPENROUTER_WEB_PLUGIN_ID ?? "web",
   openRouterSiteUrl: process.env.OPENROUTER_SITE_URL ?? "",
   openRouterAppName: process.env.OPENROUTER_APP_NAME ?? "ia-product-audit",
@@ -60,12 +66,44 @@ function readDotEnvValue(name: string): string | null {
   return null;
 }
 
+function normalizeModelValue(value: string | null | undefined): string | null {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+}
+
+function isGeminiModel(value: string | null | undefined): boolean {
+  return normalizeModelValue(value)?.toLowerCase().includes("gemini") ?? false;
+}
+
+function isLegacyGeminiModel(value: string | null | undefined): boolean {
+  const normalized = normalizeModelValue(value);
+  return normalized ? LEGACY_GEMINI_MODELS.has(normalized) : false;
+}
+
 export function getOpenRouterGeneratorModel(): string {
-  return readDotEnvValue("OPENROUTER_GENERATOR_MODEL") || env.openRouterGeneratorModel;
+  const configured = normalizeModelValue(readDotEnvValue("OPENROUTER_GENERATOR_MODEL") || env.openRouterGeneratorModel);
+  if (!configured) {
+    return DEFAULT_GEMINI_MODEL;
+  }
+  if (isLegacyGeminiModel(configured)) {
+    return DEFAULT_GEMINI_MODEL;
+  }
+  return configured;
 }
 
 export function getOpenRouterGeminiAuditModel(): string {
-  return readDotEnvValue("OPENROUTER_GEMINI_AUDIT_MODEL") || env.openRouterGeminiAuditModel;
+  const auditConfigured = normalizeModelValue(readDotEnvValue("OPENROUTER_GEMINI_AUDIT_MODEL") || env.openRouterGeminiAuditModel);
+  const generatorConfigured = normalizeModelValue(readDotEnvValue("OPENROUTER_GENERATOR_MODEL") || env.openRouterGeneratorModel);
+
+  if (auditConfigured && isGeminiModel(auditConfigured) && !isLegacyGeminiModel(auditConfigured)) {
+    return auditConfigured;
+  }
+
+  if (generatorConfigured && isGeminiModel(generatorConfigured) && !isLegacyGeminiModel(generatorConfigured)) {
+    return generatorConfigured;
+  }
+
+  return DEFAULT_GEMINI_MODEL;
 }
 
 export function assertOpenRouterKey(): string {
