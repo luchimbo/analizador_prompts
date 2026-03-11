@@ -208,6 +208,10 @@ export async function deleteProductRecord(productId: string): Promise<boolean> {
   await db.batch(
     [
       {
+        sql: `DELETE FROM run_prompt_states WHERE run_id IN (SELECT run_id FROM runs WHERE product_id = ?)`,
+        args: [productId],
+      },
+      {
         sql: `DELETE FROM run_results WHERE run_id IN (SELECT run_id FROM runs WHERE product_id = ?)`,
         args: [productId],
       },
