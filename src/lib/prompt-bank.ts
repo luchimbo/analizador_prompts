@@ -1,5 +1,5 @@
 import { STANDARD_PROMPT_COUNT, STANDARD_TYPE_COUNTS } from "@/lib/audit-metrics";
-import { env } from "@/lib/env";
+import { env, getOpenRouterGeneratorModel } from "@/lib/env";
 import { openRouterChatJson } from "@/lib/openrouter";
 import type { AuditPrompt, ProductProfile, PromptBank, PromptType } from "@/lib/types";
 import { normalizeWhitespace } from "@/lib/utils";
@@ -64,7 +64,7 @@ async function generateWithLlm(profile: ProductProfile, language: string, market
   };
 
   const parsed = await openRouterChatJson<PromptBankPayload>({
-    model: env.openRouterGeneratorModel,
+    model: getOpenRouterGeneratorModel(),
     systemPrompt: GENERATOR_SYSTEM_PROMPT,
     userPrompt: `Generate the prompt bank for this product profile and return strict JSON only.\n\n${JSON.stringify(payload, null, 2)}`,
     temperature: 0.7,

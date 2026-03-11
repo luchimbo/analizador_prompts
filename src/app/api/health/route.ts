@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { env } from "@/lib/env";
+import { env, getOpenRouterGeminiAuditModel } from "@/lib/env";
 
 export const runtime = "nodejs";
 
@@ -9,6 +9,6 @@ export async function GET() {
     status: "ok",
     openRouterConfigured: Boolean(env.openRouterApiKey),
     defaultOpenAiModel: env.openRouterOpenAiAuditModel,
-    defaultGeminiModel: env.openRouterGeminiAuditModel,
+    defaultGeminiModel: getOpenRouterGeminiAuditModel(),
   });
 }

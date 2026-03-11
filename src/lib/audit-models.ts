@@ -1,4 +1,4 @@
-import { env } from "@/lib/env";
+import { getOpenRouterGeminiAuditModel } from "@/lib/env";
 
 const LEGACY_GEMINI_MODELS = new Set([
   "google/gemini-2.5-pro",
@@ -12,7 +12,7 @@ export function normalizeAuditedModel(provider: string | null | undefined, model
   }
 
   if (provider === "gemini" && LEGACY_GEMINI_MODELS.has(trimmed)) {
-    return env.openRouterGeminiAuditModel;
+    return getOpenRouterGeminiAuditModel();
   }
 
   return trimmed;
@@ -20,7 +20,7 @@ export function normalizeAuditedModel(provider: string | null | undefined, model
 
 export function resolveConfiguredAuditedModel(provider: string | null | undefined, model: string | null | undefined): string | null {
   if (provider === "gemini") {
-    return env.openRouterGeminiAuditModel;
+    return getOpenRouterGeminiAuditModel();
   }
 
   return normalizeAuditedModel(provider, model);

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { env } from "@/lib/env";
+import { env, getOpenRouterGeminiAuditModel } from "@/lib/env";
 
 export const runtime = "nodejs";
 
@@ -11,6 +11,6 @@ export async function GET() {
     databaseMode: env.tursoDatabaseUrl.startsWith("file:") ? "local-libsql" : "turso",
     lockedMarket: env.defaultMarket,
     defaultOpenAiModel: env.openRouterOpenAiAuditModel,
-    defaultGeminiModel: env.openRouterGeminiAuditModel,
+    defaultGeminiModel: getOpenRouterGeminiAuditModel(),
   });
 }

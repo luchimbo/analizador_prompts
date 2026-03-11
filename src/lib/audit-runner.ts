@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { env } from "@/lib/env";
+import { env, getOpenRouterGeminiAuditModel } from "@/lib/env";
 import { openRouterExecutePrompt } from "@/lib/openrouter";
 import type { AuditPrompt, AuditedProvider, PromptExecutionResult } from "@/lib/types";
 import { uniquePreserveOrder } from "@/lib/utils";
@@ -13,7 +13,7 @@ export function defaultAuditedModel(provider: AuditedProvider): string {
     case "openai":
       return env.openRouterOpenAiAuditModel;
     case "gemini":
-      return env.openRouterGeminiAuditModel;
+      return getOpenRouterGeminiAuditModel();
     case "custom":
       throw new Error("For custom audited provider you must send auditedModel");
   }

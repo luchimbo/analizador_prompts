@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
+
 const env = {
   appName: process.env.APP_NAME ?? "IA Product Audit",
   requestTimeoutSeconds: Number(process.env.REQUEST_TIMEOUT_SECONDS ?? "60"),
@@ -11,14 +14,59 @@ const env = {
   tursoAuthToken: process.env.TURSO_AUTH_TOKEN ?? "",
   openRouterApiKey: process.env.OPENROUTER_API_KEY ?? "",
   openRouterBaseUrl: process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1",
-  openRouterGeneratorModel: process.env.OPENROUTER_GENERATOR_MODEL ?? "google/gemini-2.5-flash",
+  openRouterGeneratorModel: process.env.OPENROUTER_GENERATOR_MODEL ?? "google/gemini-2.5-flash-lite:online",
   openRouterJudgeModel: process.env.OPENROUTER_JUDGE_MODEL ?? "moonshotai/kimi-k2",
   openRouterOpenAiAuditModel: process.env.OPENROUTER_OPENAI_AUDIT_MODEL ?? "openai/gpt-4.1-mini",
-  openRouterGeminiAuditModel: process.env.OPENROUTER_GEMINI_AUDIT_MODEL ?? "google/gemini-2.5-flash:online",
+  openRouterGeminiAuditModel: process.env.OPENROUTER_GEMINI_AUDIT_MODEL ?? "google/gemini-2.5-flash-lite:online",
   openRouterWebPluginId: process.env.OPENROUTER_WEB_PLUGIN_ID ?? "web",
   openRouterSiteUrl: process.env.OPENROUTER_SITE_URL ?? "",
   openRouterAppName: process.env.OPENROUTER_APP_NAME ?? "ia-product-audit",
 };
+
+function readDotEnvValue(name: string): string | null {
+  try {
+    const envPath = path.resolve(process.cwd(), ".env");
+    const contents = readFileSync(envPath, "utf8");
+    for (const line of contents.split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) {
+        continue;
+      }
+
+      const separatorIndex = trimmed.indexOf("=");
+      if (separatorIndex < 0) {
+        continue;
+      }
+
+      const key = trimmed.slice(0, separatorIndex).trim();
+      if (key !== name) {
+        continue;
+      }
+
+      const value = trimmed.slice(separatorIndex + 1).trim();
+      if (
+        (value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'"))
+      ) {
+        return value.slice(1, -1);
+      }
+
+      return value;
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
+export function getOpenRouterGeneratorModel(): string {
+  return readDotEnvValue("OPENROUTER_GENERATOR_MODEL") || env.openRouterGeneratorModel;
+}
+
+export function getOpenRouterGeminiAuditModel(): string {
+  return readDotEnvValue("OPENROUTER_GEMINI_AUDIT_MODEL") || env.openRouterGeminiAuditModel;
+}
 
 export function assertOpenRouterKey(): string {
   if (!env.openRouterApiKey) {

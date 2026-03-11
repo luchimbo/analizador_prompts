@@ -731,7 +731,7 @@ export function AuditDashboard() {
 
                   {lockedAuditTarget ? (
                     <p className="locked-audit-note">
-                      IA bloqueada para este producto: <strong>{formatProviderLabel(lockedAuditTarget.provider)}</strong> · <strong>{lockedAuditTarget.model}</strong>
+                      IA bloqueada para este producto: <strong>{formatProviderLabel(lockedAuditTarget.provider)}</strong> · <strong>{formatDisplayedModel(lockedAuditTarget.provider, lockedAuditTarget.model, defaultModels)}</strong>
                     </p>
                   ) : (
                     <p className="locked-audit-note">
@@ -882,12 +882,12 @@ export function AuditDashboard() {
                   <article className="card run-table-card">
                     <div className="card-head">
                       <span>{showingLiveResults ? "Resultados en vivo" : "Resultados del producto"}</span>
-                      <span>
-                        {showingLiveResults
-                          ? `${formatProviderLabel(auditedProvider)} · ${auditedModel || "modelo por defecto"}`
-                          : `${formatProviderLabel(activeRun?.auditedProvider)} · ${activeRun?.auditedModel}`}
-                      </span>
-                    </div>
+                        <span>
+                          {showingLiveResults
+                            ? `${formatProviderLabel(auditedProvider)} · ${formatDisplayedModel(auditedProvider, auditedModel, defaultModels) || "modelo por defecto"}`
+                            : `${formatProviderLabel(activeRun?.auditedProvider)} · ${formatDisplayedModel(activeRun?.auditedProvider, activeRun?.auditedModel, defaultModels)}`}
+                        </span>
+                      </div>
 
                     <div className="result-list">
                       {visibleResults.map((result) => (
@@ -1148,6 +1148,18 @@ function formatProviderOptionLabel(provider: ProviderValue, defaults: Partial<Re
     return label;
   }
   return `${label} - ${model}`;
+}
+
+function formatDisplayedModel(
+  provider: string | null | undefined,
+  model: string | null | undefined,
+  defaults: Partial<Record<ProviderValue, string>>,
+): string {
+  if (normalizeProvider(provider) === "gemini") {
+    return defaults.gemini?.trim() || model?.trim() || "(sin configurar)";
+  }
+
+  return model?.trim() || defaults[normalizeProvider(provider) as ProviderValue]?.trim() || "(sin configurar)";
 }
 
 function formatProviderLabel(provider: string | null | undefined): string {
