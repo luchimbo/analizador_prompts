@@ -17,3 +17,11 @@ export function normalizeAuditedModel(provider: string | null | undefined, model
 
   return trimmed;
 }
+
+export function resolveConfiguredAuditedModel(provider: string | null | undefined, model: string | null | undefined): string | null {
+  if (provider === "gemini") {
+    return env.openRouterGeminiAuditModel;
+  }
+
+  return normalizeAuditedModel(provider, model);
+}

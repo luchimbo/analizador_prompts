@@ -16,8 +16,6 @@ type LoadingAction = "boot" | "add-product" | "select-product" | "prompts" | "ru
 
 const LOCKED_LANGUAGE = "es";
 const LOCKED_MARKET = "Argentina";
-const GEMINI_DEFAULT_MODEL = "google/gemini-2.5-flash:online";
-const LEGACY_GEMINI_MODELS = new Set(["google/gemini-2.5-pro", "google/gemini-2.5-pro:online"]);
 
 interface HealthConfig {
   defaultOpenAiModel?: string;
@@ -224,7 +222,7 @@ export function AuditDashboard() {
       const health = await requestJson<HealthConfig>("/api/health", { method: "GET" });
       const mappedDefaults: Record<ProviderValue, string> = {
         openai: health.defaultOpenAiModel ?? "",
-        gemini: normalizeDisplayedModel("gemini", health.defaultGeminiModel ?? GEMINI_DEFAULT_MODEL),
+        gemini: health.defaultGeminiModel ?? "",
         custom: "",
       };
       setDefaultModels(mappedDefaults);
@@ -238,15 +236,7 @@ export function AuditDashboard() {
           setAuditedModel(initial);
         }
       }
-    } catch {
-      setDefaultModels((current) => ({
-        ...current,
-        gemini: normalizeDisplayedModel("gemini", current.gemini || GEMINI_DEFAULT_MODEL),
-      }));
-      if (auditedProvider === "gemini" && (!auditedModel || LEGACY_GEMINI_MODELS.has(auditedModel))) {
-        setAuditedModel(GEMINI_DEFAULT_MODEL);
-      }
-    }
+    } catch {}
   }
 
   async function loadCatalogBrandRules() {
@@ -769,16 +759,17 @@ export function AuditDashboard() {
                       <label htmlFor="auditedModel">Modelo (slug)</label>
                       <input
                         id="auditedModel"
-                        placeholder={defaultModels[auditedProvider] || "openai/gpt-4.1-mini"}
+                        placeholder={defaultModels[auditedProvider] || (auditedProvider === "gemini" ? "se toma de .env" : "openai/gpt-4.1-mini")}
                         value={auditedModel}
                         onChange={(event) => setAuditedModel(event.target.value)}
-                        disabled={Boolean(lockedAuditTarget)}
+                        disabled={Boolean(lockedAuditTarget) || auditedProvider === "gemini"}
                       />
                     </div>
                   </div>
 
                   <p className="stage-copy">
                     Modelo por defecto para {auditedProvider}: <strong>{defaultModels[auditedProvider] || "(sin configurar)"}</strong>
+                    {auditedProvider === "gemini" ? " (Gemini se fuerza desde .env)" : ""}
                   </p>
 
                   <div className="actions">
@@ -1139,8 +1130,8 @@ function normalizeDisplayedModel(
   defaults?: Partial<Record<ProviderValue, string>>,
 ): string {
   const trimmed = model?.trim() ?? "";
-  if (normalizeProvider(provider) === "gemini" && (!trimmed || LEGACY_GEMINI_MODELS.has(trimmed))) {
-    return defaults?.gemini || GEMINI_DEFAULT_MODEL;
+  if (normalizeProvider(provider) === "gemini") {
+    return defaults?.gemini || trimmed;
   }
   return trimmed;
 }

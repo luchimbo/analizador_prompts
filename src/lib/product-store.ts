@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { normalizeAuditedModel } from "@/lib/audit-models";
+import { resolveConfiguredAuditedModel } from "@/lib/audit-models";
 import { getDb } from "@/lib/db";
 import { validatePromptBank } from "@/lib/prompt-bank";
 import type { ProductProfile, PromptBank, SavedProduct } from "@/lib/types";
@@ -306,7 +306,7 @@ function mapProductRow(row: Record<string, unknown>): SavedProduct {
     language: asString(row.language),
     market: asString(row.market),
     lockedAuditedProvider,
-    lockedAuditedModel: normalizeAuditedModel(lockedAuditedProvider, asNullableString(row.locked_audited_model)),
+    lockedAuditedModel: resolveConfiguredAuditedModel(lockedAuditedProvider, asNullableString(row.locked_audited_model)),
     latestRunId: asNullableString(row.latest_run_id),
     profile: {
       sourceUrl: asString(row.source_url),

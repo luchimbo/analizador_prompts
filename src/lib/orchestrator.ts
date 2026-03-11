@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import { buildRunSummary, isSupportedPromptCount, STANDARD_PROMPT_COUNT } from "@/lib/audit-metrics";
-import { normalizeAuditedModel } from "@/lib/audit-models";
+import { resolveConfiguredAuditedModel } from "@/lib/audit-models";
 import { env } from "@/lib/env";
 import { defaultAuditedModel, executeAuditPrompt } from "@/lib/audit-runner";
 import { judgeExecution } from "@/lib/judge";
@@ -55,7 +55,7 @@ export async function previewPromptBank(request: PromptBankRequest): Promise<Pro
 
 export async function runAudit(request: AuditRunRequest): Promise<AuditRunResponse> {
   const auditedProvider = request.auditedProvider ?? "openai";
-  const auditedModel = request.auditedModel ?? defaultAuditedModel(auditedProvider);
+  const auditedModel = resolveConfiguredAuditedModel(auditedProvider, request.auditedModel) ?? defaultAuditedModel(auditedProvider);
   const profile = await buildProductProfile(request.productUrl, request.overrides ?? {});
   const promptBank = await generatePromptBank(profile, LOCKED_LANGUAGE, LOCKED_MARKET);
   return executeAuditFlow({
@@ -140,10 +140,10 @@ export function ensureReadyPromptBank(product: SavedProduct): PromptBank {
 
 export function resolveLockedAuditTarget(product: SavedProduct, requestedProvider?: AuditedProvider, requestedModel?: string | null): { auditedProvider: AuditedProvider; auditedModel: string } {
   const requestedAuditedProvider = normalizeAuditedProvider(requestedProvider ?? "openai");
-  const requestedAuditedModel = normalizeAuditedModel(requestedAuditedProvider, requestedModel?.trim() || defaultAuditedModel(requestedAuditedProvider)) || defaultAuditedModel(requestedAuditedProvider);
+  const requestedAuditedModel = resolveConfiguredAuditedModel(requestedAuditedProvider, requestedModel?.trim() || defaultAuditedModel(requestedAuditedProvider)) || defaultAuditedModel(requestedAuditedProvider);
 
   const lockedProvider = product.lockedAuditedProvider ? normalizeAuditedProvider(product.lockedAuditedProvider as AuditedProvider) : null;
-  const lockedModel = normalizeAuditedModel(lockedProvider, product.lockedAuditedModel);
+  const lockedModel = resolveConfiguredAuditedModel(lockedProvider, product.lockedAuditedModel);
 
   if (!lockedProvider || !lockedModel) {
     return {
