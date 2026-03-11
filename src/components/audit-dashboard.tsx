@@ -117,9 +117,9 @@ export function AuditDashboard() {
       { label: "Muestra", value: getPromptPlanLabel(activeRun.summary.totalPrompts) },
       { label: "Product Hit", value: `${Math.round(activeRun.summary.productHitRate * 100)}%` },
       { label: "Vendor Hit", value: `${Math.round(activeRun.summary.vendorHitRate * 100)}%` },
-      { label: "URL Accuracy", value: `${Math.round(activeRun.summary.exactUrlAccuracyRate * 100)}%` },
-      { label: "Avg Internal", value: (activeRun.summary.averageInternalAlternatives ?? 0).toFixed(2) },
-      { label: "Avg External", value: (activeRun.summary.averageExternalCompetitors ?? 0).toFixed(2) },
+      { label: "Exact URL", value: `${Math.round(activeRun.summary.exactUrlAccuracyRate * 100)}%` },
+      { label: "Internal Bonus Base", value: (activeRun.summary.averageInternalAlternatives ?? 0).toFixed(2) },
+      { label: "External Penalty Base", value: (activeRun.summary.averageExternalCompetitors ?? 0).toFixed(2) },
       { label: "Avg Rank", value: activeRun.summary.averageRankWhenPresent.toFixed(2) },
     ];
   }, [activeRun]);
