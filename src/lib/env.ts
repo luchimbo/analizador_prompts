@@ -6,6 +6,10 @@ const LEGACY_GEMINI_MODELS = new Set([
   "google/gemini-2.5-pro",
   "google/gemini-2.5-pro:online",
 ]);
+const NON_LITE_FLASH_GEMINI_MODELS = new Set([
+  "google/gemini-2.5-flash",
+  "google/gemini-2.5-flash:online",
+]);
 
 const env = {
   appName: process.env.APP_NAME ?? "IA Product Audit",
@@ -80,24 +84,39 @@ function isLegacyGeminiModel(value: string | null | undefined): boolean {
   return normalized ? LEGACY_GEMINI_MODELS.has(normalized) : false;
 }
 
+function isPlainFlashGeminiModel(value: string | null | undefined): boolean {
+  const normalized = normalizeModelValue(value);
+  return normalized ? NON_LITE_FLASH_GEMINI_MODELS.has(normalized) : false;
+}
+
 function isFlashLiteGeminiModel(value: string | null | undefined): boolean {
   return normalizeModelValue(value)?.toLowerCase().includes("flash-lite") ?? false;
 }
 
-export function getOpenRouterGeneratorModel(): string {
-  const configured = normalizeModelValue(readDotEnvValue("OPENROUTER_GENERATOR_MODEL") || env.openRouterGeneratorModel);
-  if (!configured) {
+function normalizePreferredGeminiModel(value: string | null | undefined): string | null {
+  const normalized = normalizeModelValue(value);
+  if (!normalized) {
+    return null;
+  }
+
+  if (isGeminiModel(normalized) && (isLegacyGeminiModel(normalized) || isPlainFlashGeminiModel(normalized))) {
     return DEFAULT_GEMINI_MODEL;
   }
-  if (isLegacyGeminiModel(configured)) {
+
+  return normalized;
+}
+
+export function getOpenRouterGeneratorModel(): string {
+  const configured = normalizePreferredGeminiModel(readDotEnvValue("OPENROUTER_GENERATOR_MODEL") || env.openRouterGeneratorModel);
+  if (!configured) {
     return DEFAULT_GEMINI_MODEL;
   }
   return configured;
 }
 
 export function getOpenRouterGeminiAuditModel(): string {
-  const auditConfigured = normalizeModelValue(readDotEnvValue("OPENROUTER_GEMINI_AUDIT_MODEL") || env.openRouterGeminiAuditModel);
-  const generatorConfigured = normalizeModelValue(readDotEnvValue("OPENROUTER_GENERATOR_MODEL") || env.openRouterGeneratorModel);
+  const auditConfigured = normalizePreferredGeminiModel(readDotEnvValue("OPENROUTER_GEMINI_AUDIT_MODEL") || env.openRouterGeminiAuditModel);
+  const generatorConfigured = normalizePreferredGeminiModel(readDotEnvValue("OPENROUTER_GENERATOR_MODEL") || env.openRouterGeneratorModel);
   const candidates = [generatorConfigured, auditConfigured].filter(
     (value): value is string => Boolean(value && isGeminiModel(value) && !isLegacyGeminiModel(value)),
   );
