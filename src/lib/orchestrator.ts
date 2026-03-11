@@ -114,7 +114,12 @@ export async function generateProductPrompts(productId: string): Promise<SavedPr
     throw new Error("Product not found");
   }
 
-  if (product.promptBank) {
+  if (
+    product.promptBank &&
+    product.promptBank.prompts.length === STANDARD_PROMPT_COUNT &&
+    product.promptBank.language === LOCKED_LANGUAGE &&
+    product.promptBank.market === LOCKED_MARKET
+  ) {
     return product;
   }
 

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-import { getPromptPlanDescription, getPromptPlanLabel, inferPromptCount, isLegacyPromptCount, isSupportedPromptCount, STANDARD_PROMPT_COUNT } from "@/lib/audit-metrics";
+import { getPromptPlanDescription, getPromptPlanLabel, inferPromptCount, isSupportedPromptCount, LEGACY_PROMPT_COUNT, STANDARD_PROMPT_COUNT } from "@/lib/audit-metrics";
 import type { AuditRunResponse, ProductListItem, ProductRunRequest, PromptAuditResult, RunListItem, RunProgressEvent, SavedProduct } from "@/lib/types";
 
 const providers = [
@@ -82,6 +82,11 @@ export function AuditDashboard() {
     selectedProduct?.promptBank?.language === LOCKED_LANGUAGE &&
     selectedProduct?.promptBank?.market === LOCKED_MARKET;
   const selectedPromptCount = inferPromptCount(selectedProduct?.promptBank) || STANDARD_PROMPT_COUNT;
+  const needsPromptRegeneration =
+    !selectedProduct?.promptBank ||
+    selectedProduct.promptBank.prompts.length !== STANDARD_PROMPT_COUNT ||
+    selectedProduct.promptBank.language !== LOCKED_LANGUAGE ||
+    selectedProduct.promptBank.market !== LOCKED_MARKET;
   const showingLiveResults = loadingAction === "run" || streamedResults.length > 0;
   const visibleResults = showingLiveResults ? streamedResults : activeRun?.results ?? [];
 
@@ -695,11 +700,15 @@ export function AuditDashboard() {
                     <span>{selectedProduct.promptBank?.prompts.length ?? 0} listos</span>
                   </div>
                   <p className="stage-copy">
-                    {`Genera el banco una sola vez, se guarda fijo y no se modifica. Los productos nuevos usan ${STANDARD_PROMPT_COUNT} prompts y los bancos legacy de 50 se conservan tal cual.`}
+                    {`Los productos nuevos usan ${STANDARD_PROMPT_COUNT} prompts. Si un producto quedo con ${LEGACY_PROMPT_COUNT}, desde aca lo regeneras al formato actual.`}
                   </p>
                   <div className="actions">
-                    <button onClick={handleGeneratePrompts} disabled={hasPendingWork || Boolean(selectedProduct.promptBank)}>
-                      {loadingAction === "prompts" ? "Generando prompts..." : selectedProduct.promptBank ? `${getPromptPlanLabel(selectedPromptCount)} guardados` : `Generar ${STANDARD_PROMPT_COUNT} prompts`}
+                    <button onClick={handleGeneratePrompts} disabled={hasPendingWork || !needsPromptRegeneration}>
+                      {loadingAction === "prompts"
+                        ? "Generando prompts..."
+                        : needsPromptRegeneration
+                          ? (selectedProduct.promptBank ? `Regenerar ${STANDARD_PROMPT_COUNT} prompts` : `Generar ${STANDARD_PROMPT_COUNT} prompts`)
+                          : `${getPromptPlanLabel(selectedPromptCount)} guardados`}
                     </button>
                     <button onClick={() => setShowPrompts((current) => !current)} disabled={!selectedProduct.promptBank}>
                       {showPrompts ? "Ocultar prompts" : `Ver ${selectedPromptCount} prompts`}

@@ -1,22 +1,22 @@
 import type { PromptAuditResult, PromptBank, PromptType, RunScoreBreakdown, RunSummary } from "@/lib/types";
 
-export const STANDARD_PROMPT_COUNT = 25;
-export const LEGACY_PROMPT_COUNT = 50;
+export const STANDARD_PROMPT_COUNT = 50;
+export const LEGACY_PROMPT_COUNT = 25;
 
 export const STANDARD_TYPE_COUNTS: Record<PromptType, number> = {
-  problem: 9,
-  discovery: 5,
-  comparison: 5,
-  transactional: 3,
-  branded: 3,
-};
-
-export const LEGACY_TYPE_COUNTS: Record<PromptType, number> = {
   problem: 20,
   discovery: 10,
   comparison: 10,
   transactional: 5,
   branded: 5,
+};
+
+export const LEGACY_TYPE_COUNTS: Record<PromptType, number> = {
+  problem: 9,
+  discovery: 5,
+  comparison: 5,
+  transactional: 3,
+  branded: 3,
 };
 
 export function isSupportedPromptCount(count: number): boolean {
