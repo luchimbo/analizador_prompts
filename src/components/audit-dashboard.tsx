@@ -759,7 +759,7 @@ export function AuditDashboard() {
                       <label htmlFor="auditedModel">Modelo (slug)</label>
                       <input
                         id="auditedModel"
-                        placeholder={defaultModels[auditedProvider] || (auditedProvider === "gemini" ? "se toma de .env" : "openai/gpt-4.1-mini")}
+                        placeholder={defaultModels[auditedProvider] || (auditedProvider === "gemini" ? "se toma del entorno" : "openai/gpt-4.1-mini")}
                         value={auditedModel}
                         onChange={(event) => setAuditedModel(event.target.value)}
                         disabled={Boolean(lockedAuditTarget) || auditedProvider === "gemini"}
@@ -770,7 +770,7 @@ export function AuditDashboard() {
                   <p className="stage-copy">
                     {auditedProvider === "gemini"
                       ? <>
-                          Modelo configurado en <strong>.env</strong> para Gemini: <strong>{defaultModels.gemini || "(sin configurar)"}</strong>
+                          Modelo configurado en el <strong>entorno</strong> para Gemini: <strong>{defaultModels.gemini || "(sin configurar)"}</strong>
                         </>
                       : <>
                           Modelo por defecto para {auditedProvider}: <strong>{defaultModels[auditedProvider] || "(sin configurar)"}</strong>
