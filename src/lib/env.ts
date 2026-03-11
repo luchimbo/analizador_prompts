@@ -80,6 +80,10 @@ function isLegacyGeminiModel(value: string | null | undefined): boolean {
   return normalized ? LEGACY_GEMINI_MODELS.has(normalized) : false;
 }
 
+function isFlashLiteGeminiModel(value: string | null | undefined): boolean {
+  return normalizeModelValue(value)?.toLowerCase().includes("flash-lite") ?? false;
+}
+
 export function getOpenRouterGeneratorModel(): string {
   const configured = normalizeModelValue(readDotEnvValue("OPENROUTER_GENERATOR_MODEL") || env.openRouterGeneratorModel);
   if (!configured) {
@@ -94,16 +98,16 @@ export function getOpenRouterGeneratorModel(): string {
 export function getOpenRouterGeminiAuditModel(): string {
   const auditConfigured = normalizeModelValue(readDotEnvValue("OPENROUTER_GEMINI_AUDIT_MODEL") || env.openRouterGeminiAuditModel);
   const generatorConfigured = normalizeModelValue(readDotEnvValue("OPENROUTER_GENERATOR_MODEL") || env.openRouterGeneratorModel);
+  const candidates = [generatorConfigured, auditConfigured].filter(
+    (value): value is string => Boolean(value && isGeminiModel(value) && !isLegacyGeminiModel(value)),
+  );
+  const flashLiteCandidate = candidates.find((value) => isFlashLiteGeminiModel(value));
 
-  if (auditConfigured && isGeminiModel(auditConfigured) && !isLegacyGeminiModel(auditConfigured)) {
-    return auditConfigured;
+  if (flashLiteCandidate) {
+    return flashLiteCandidate;
   }
 
-  if (generatorConfigured && isGeminiModel(generatorConfigured) && !isLegacyGeminiModel(generatorConfigured)) {
-    return generatorConfigured;
-  }
-
-  return DEFAULT_GEMINI_MODEL;
+  return candidates[0] ?? DEFAULT_GEMINI_MODEL;
 }
 
 export function assertOpenRouterKey(): string {
