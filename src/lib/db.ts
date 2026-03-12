@@ -41,6 +41,9 @@ export async function ensureDatabaseSchema(): Promise<void> {
             updated_at TEXT NOT NULL,
             language TEXT NOT NULL,
             market TEXT NOT NULL,
+            description_improved INTEGER NOT NULL DEFAULT 0,
+            description_improved_at TEXT,
+            improvement_checkpoints_json TEXT,
             latest_run_id TEXT,
             locked_audited_provider TEXT,
             locked_audited_model TEXT,
@@ -176,6 +179,9 @@ export async function ensureDatabaseSchema(): Promise<void> {
         await ensureColumn("run_results", "alternative_mentions_json", `ALTER TABLE run_results ADD COLUMN alternative_mentions_json TEXT`);
         await ensureColumn("run_results", "scoring_reasons_json", `ALTER TABLE run_results ADD COLUMN scoring_reasons_json TEXT`);
         await ensureColumn("run_results", "alternative_classifications_json", `ALTER TABLE run_results ADD COLUMN alternative_classifications_json TEXT`);
+        await ensureColumn("products", "description_improved", `ALTER TABLE products ADD COLUMN description_improved INTEGER NOT NULL DEFAULT 0`);
+        await ensureColumn("products", "description_improved_at", `ALTER TABLE products ADD COLUMN description_improved_at TEXT`);
+        await ensureColumn("products", "improvement_checkpoints_json", `ALTER TABLE products ADD COLUMN improvement_checkpoints_json TEXT`);
         await ensureColumn("products", "locked_audited_provider", `ALTER TABLE products ADD COLUMN locked_audited_provider TEXT`);
         await ensureColumn("products", "locked_audited_model", `ALTER TABLE products ADD COLUMN locked_audited_model TEXT`);
         await ensureColumn("runs", "error_stage", `ALTER TABLE runs ADD COLUMN error_stage TEXT`);

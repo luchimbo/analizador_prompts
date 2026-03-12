@@ -175,6 +175,12 @@ export interface SavedProduct {
   updatedAt: string;
   language: string;
   market: string;
+  descriptionImproved: boolean;
+  descriptionImprovedAt?: string | null;
+  improvementCheckpoints?: {
+    firstRunAt?: string | null;
+    secondRunAt?: string | null;
+  };
   lockedAuditedProvider?: string | null;
   lockedAuditedModel?: string | null;
   profile: ProductProfile;
@@ -194,6 +200,10 @@ export interface ProductListItem {
   canonicalUrl: string;
   promptCount: number;
   runCount: number;
+  firstRunAt?: string | null;
+  secondRunAt?: string | null;
+  descriptionImproved: boolean;
+  descriptionImprovedAt?: string | null;
   latestRunId?: string | null;
   lockedAuditedProvider?: string | null;
   lockedAuditedModel?: string | null;
@@ -219,6 +229,12 @@ export interface ProductRunRequest {
 export interface UpdateProductPromptRequest {
   promptId: string;
   prompt: string;
+}
+
+export interface UpdateProductImprovementRequest {
+  descriptionImproved?: boolean;
+  firstRunAt?: string | null;
+  secondRunAt?: string | null;
 }
 
 export interface RunProgressEvent {

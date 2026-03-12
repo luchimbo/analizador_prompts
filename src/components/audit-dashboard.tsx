@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { getPromptPlanDescription, getPromptPlanLabel, inferPromptCount, isSupportedPromptCount, LEGACY_PROMPT_COUNT, STANDARD_PROMPT_COUNT } from "@/lib/audit-metrics";
+import { ProductImprovementsBoard } from "@/components/product-improvements-board";
 import type { AuditRunResponse, ProductListItem, ProductRunRequest, PromptAuditResult, RunListItem, RunProgressEvent, SavedProduct } from "@/lib/types";
 
 const providers = [
@@ -13,6 +14,7 @@ const providers = [
 
 type ProviderValue = (typeof providers)[number]["value"];
 type LoadingAction = "boot" | "add-product" | "select-product" | "prompts" | "run" | "run-detail" | null;
+type DashboardSector = "audit" | "improvements";
 
 const LOCKED_LANGUAGE = "es";
 const LOCKED_MARKET = "Argentina";
@@ -64,6 +66,7 @@ export function AuditDashboard() {
   const [leftCompareRun, setLeftCompareRun] = useState<AuditRunResponse | null>(null);
   const [rightCompareRun, setRightCompareRun] = useState<AuditRunResponse | null>(null);
   const [loadingComparison, setLoadingComparison] = useState(false);
+  const [activeSector, setActiveSector] = useState<DashboardSector>("audit");
   const [defaultModels, setDefaultModels] = useState<Record<ProviderValue, string>>({
     openai: "",
     gemini: "",
@@ -87,6 +90,9 @@ export function AuditDashboard() {
     selectedProduct.promptBank.prompts.length !== STANDARD_PROMPT_COUNT ||
     selectedProduct.promptBank.language !== LOCKED_LANGUAGE ||
     selectedProduct.promptBank.market !== LOCKED_MARKET;
+  const productsWithRuns = products.filter((product) => product.runCount > 0).length;
+  const geomodiProducts = products.filter((product) => product.descriptionImproved).length;
+  const secondRunProducts = products.filter((product) => Boolean(product.secondRunAt)).length;
   const showingLiveResults = loadingAction === "run" || streamedResults.length > 0;
   const visibleResults = showingLiveResults ? streamedResults : activeRun?.results ?? [];
 
@@ -576,28 +582,40 @@ export function AuditDashboard() {
     <div className="shell">
       <section className="hero hero-product-first">
         <div className="hero-copy">
-          <span className="eyebrow">GEO Product Audit</span>
-          <h1>Primero elegis el producto. Despues ves prompts, respuestas y Excel.</h1>
+          <span className="eyebrow">{activeSector === "audit" ? "GEO Product Audit" : "Seguimiento de mejoras"}</span>
+          <h1>
+            {activeSector === "audit"
+              ? "Primero elegis el producto. Despues ves prompts, respuestas y Excel."
+              : "Controlas primera corrida, mejora GEOModi y segunda corrida desde el mismo workspace."}
+          </h1>
           <p>
-            La interfaz trabaja como una biblioteca de productos para el mercado argentino: agregas URLs, elegis una ficha guardada, generas sus prompts, elegis que IA la responda y revisas la corrida completa desde el mismo lugar.
+            {activeSector === "audit"
+              ? "La interfaz trabaja como una biblioteca de productos para el mercado argentino: agregas URLs, elegis una ficha guardada, generas sus prompts, elegis que IA la responda y revisas la corrida completa desde el mismo lugar."
+              : "Este sector sigue el ciclo de mejora de descripcion: primera corrida, optimizacion manual con GEOModi y segunda corrida para comparar si el producto sube su score."}
           </p>
+          <div className="page-nav">
+            <button type="button" className={`page-link${activeSector === "audit" ? " is-active" : ""}`} onClick={() => setActiveSector("audit")}>Sector audit</button>
+            <button type="button" className={`page-link${activeSector === "improvements" ? " is-active" : ""}`} onClick={() => setActiveSector("improvements")}>Sector mejoras</button>
+          </div>
         </div>
         <div className="hero-metrics hero-metrics-tight">
           <div>
-            <strong>{products.length}</strong>
-            <span>productos guardados</span>
+            <strong>{activeSector === "audit" ? products.length : productsWithRuns}</strong>
+            <span>{activeSector === "audit" ? "productos guardados" : "con primera corrida"}</span>
           </div>
           <div>
-            <strong>{selectedProduct?.promptBank?.prompts.length ?? 0}</strong>
-            <span>prompts del producto</span>
+            <strong>{activeSector === "audit" ? (selectedProduct?.promptBank?.prompts.length ?? 0) : geomodiProducts}</strong>
+            <span>{activeSector === "audit" ? "prompts del producto" : "mejorados por GEOModi"}</span>
           </div>
           <div>
-            <strong>{productRuns.length}</strong>
-            <span>corridas historicas</span>
+            <strong>{activeSector === "audit" ? productRuns.length : secondRunProducts}</strong>
+            <span>{activeSector === "audit" ? "corridas historicas" : "con segunda corrida"}</span>
           </div>
         </div>
       </section>
 
+      {activeSector === "audit" ? (
+        <>
       <section className="product-intake">
         <div className="field full">
           <label htmlFor="productUrl">Agregar producto por URL</label>
@@ -1123,6 +1141,10 @@ export function AuditDashboard() {
           <p className="empty-state">No hay marcas cargadas en catalogo_products todavia.</p>
         )}
       </section>
+        </>
+      ) : (
+        <ProductImprovementsBoard />
+      )}
     </div>
   );
 }

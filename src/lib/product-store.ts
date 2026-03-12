@@ -43,7 +43,7 @@ export async function upsertProductRecord({
   const targetSource = normalizeUrl(profile.sourceUrl);
 
   const existingResult = await db.execute({
-    sql: `SELECT product_id, created_at, latest_run_id, locked_audited_provider, locked_audited_model, prompt_bank_json FROM products WHERE canonical_url = ? OR source_url = ? LIMIT 1`,
+    sql: `SELECT product_id, created_at, latest_run_id, description_improved, description_improved_at, improvement_checkpoints_json, locked_audited_provider, locked_audited_model, prompt_bank_json FROM products WHERE canonical_url = ? OR source_url = ? LIMIT 1`,
     args: [targetCanonical, targetSource],
   });
   const existing = existingResult.rows[0];
@@ -53,18 +53,21 @@ export async function upsertProductRecord({
   const productId = asNonEmptyString(existing?.product_id) ?? randomUUID();
   const createdAt = asNonEmptyString(existing?.created_at) ?? timestamp;
   const latestRunId = asNullableString(existing?.latest_run_id);
+  const descriptionImproved = asBoolean(existing?.description_improved);
+  const descriptionImprovedAt = asNullableString(existing?.description_improved_at);
+  const improvementCheckpoints = parseJson<SavedProduct["improvementCheckpoints"]>(existing?.improvement_checkpoints_json, {});
   const lockedAuditedProvider = asNullableString(existing?.locked_audited_provider);
   const lockedAuditedModel = asNullableString(existing?.locked_audited_model);
 
   await db.execute({
     sql: `
       INSERT OR REPLACE INTO products (
-        product_id, created_at, updated_at, language, market, latest_run_id,
+        product_id, created_at, updated_at, language, market, description_improved, description_improved_at, improvement_checkpoints_json, latest_run_id,
         locked_audited_provider, locked_audited_model,
         source_url, canonical_url, domain, product_name, brand_name, store_name,
         category, page_title, meta_description, aliases_json, vendor_aliases_json,
         competitor_names_json, extraction_notes_json, prompt_bank_json
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     args: [
       productId,
@@ -72,6 +75,9 @@ export async function upsertProductRecord({
       timestamp,
       language,
       market,
+      descriptionImproved ? 1 : 0,
+      descriptionImprovedAt,
+      JSON.stringify(improvementCheckpoints ?? {}),
       latestRunId,
       lockedAuditedProvider,
       lockedAuditedModel,
@@ -95,6 +101,59 @@ export async function upsertProductRecord({
   const saved = await getProductRecord(productId);
   if (!saved) {
     throw new Error("Could not save product");
+  }
+  return saved;
+}
+
+export async function updateProductDescriptionImprovement(productId: string, descriptionImproved: boolean): Promise<SavedProduct> {
+  await ensureProductDataHealth();
+  const db = await getDb();
+  const result = await db.execute({
+    sql: `UPDATE products SET updated_at = ?, description_improved = ?, description_improved_at = ? WHERE product_id = ?`,
+    args: [new Date().toISOString(), descriptionImproved ? 1 : 0, descriptionImproved ? new Date().toISOString() : null, productId],
+  });
+
+  if (Number(result.rowsAffected) === 0) {
+    throw new Error("Product not found");
+  }
+
+  const saved = await getProductRecord(productId);
+  if (!saved) {
+    throw new Error("Product not found");
+  }
+  return saved;
+}
+
+export async function updateProductImprovementCheckpoints(
+  productId: string,
+  checkpoints: { firstRunAt?: string | null; secondRunAt?: string | null },
+): Promise<SavedProduct> {
+  await ensureProductDataHealth();
+  const product = await getProductRecord(productId);
+  if (!product) {
+    throw new Error("Product not found");
+  }
+
+  const current = product.improvementCheckpoints ?? {};
+  const next = {
+    ...current,
+    ...(Object.prototype.hasOwnProperty.call(checkpoints, "firstRunAt") ? { firstRunAt: checkpoints.firstRunAt ?? null } : {}),
+    ...(Object.prototype.hasOwnProperty.call(checkpoints, "secondRunAt") ? { secondRunAt: checkpoints.secondRunAt ?? null } : {}),
+  };
+
+  const db = await getDb();
+  const result = await db.execute({
+    sql: `UPDATE products SET updated_at = ?, improvement_checkpoints_json = ? WHERE product_id = ?`,
+    args: [new Date().toISOString(), JSON.stringify(next), productId],
+  });
+
+  if (Number(result.rowsAffected) === 0) {
+    throw new Error("Product not found");
+  }
+
+  const saved = await getProductRecord(productId);
+  if (!saved) {
+    throw new Error("Product not found");
   }
   return saved;
 }
@@ -309,6 +368,9 @@ function mapProductRow(row: Record<string, unknown>): SavedProduct {
     updatedAt: asString(row.updated_at),
     language: asString(row.language),
     market: asString(row.market),
+    descriptionImproved: asBoolean(row.description_improved),
+    descriptionImprovedAt: asNullableString(row.description_improved_at),
+    improvementCheckpoints: parseJson<SavedProduct["improvementCheckpoints"]>(row.improvement_checkpoints_json, {}),
     lockedAuditedProvider,
     lockedAuditedModel: resolveConfiguredAuditedModel(lockedAuditedProvider, asNullableString(row.locked_audited_model)),
     latestRunId: asNullableString(row.latest_run_id),
@@ -372,4 +434,18 @@ function asNullableString(value: unknown): string | null {
   }
   const normalized = String(value);
   return normalized ? normalized : null;
+}
+
+function asBoolean(value: unknown): boolean {
+  if (typeof value === "boolean") {
+    return value;
+  }
+  if (typeof value === "number") {
+    return value !== 0;
+  }
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    return normalized === "1" || normalized === "true";
+  }
+  return false;
 }

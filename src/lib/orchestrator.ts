@@ -7,13 +7,13 @@ import { defaultAuditedModel, executeAuditPrompt } from "@/lib/audit-runner";
 import { judgeExecution } from "@/lib/judge";
 import { buildProductProfile } from "@/lib/product-profiler";
 import { generatePromptBank } from "@/lib/prompt-bank";
-import { deleteProductRecord, getProductRecord, listProductRecords, updateProductAuditLock, updateProductLatestRun, updateProductPromptBank, upsertProductRecord } from "@/lib/product-store";
+import { deleteProductRecord, getProductRecord, listProductRecords, updateProductAuditLock, updateProductDescriptionImprovement, updateProductImprovementCheckpoints, updateProductLatestRun, updateProductPromptBank, upsertProductRecord } from "@/lib/product-store";
 import {
   appendRunResult,
-  countRunsByProduct,
   createRunRecord,
   finalizeRunRecord,
   findResumableRun,
+  getRunMilestonesByProduct,
   getRun,
   getRunPromptStates,
   listRuns,
@@ -81,22 +81,32 @@ export async function createProduct(request: CreateProductRequest): Promise<Save
 export async function listProducts(): Promise<ProductListItem[]> {
   const products = await listProductRecords();
   return Promise.all(
-    products.map(async (product) => ({
-      productId: product.productId,
-      createdAt: product.createdAt,
-      updatedAt: product.updatedAt,
-      productName: product.profile.productName,
-      brandName: product.profile.brandName ?? null,
-      category: product.profile.category ?? null,
-      storeName: product.profile.storeName ?? null,
-      sourceUrl: product.profile.sourceUrl,
-      canonicalUrl: product.profile.canonicalUrl,
-      promptCount: product.promptBank?.prompts.length ?? 0,
-      runCount: await countRunsByProduct(product.productId),
-      latestRunId: product.latestRunId ?? null,
-      lockedAuditedProvider: product.lockedAuditedProvider ?? null,
-      lockedAuditedModel: product.lockedAuditedModel ?? null,
-    })),
+    products.map(async (product) => {
+      const milestones = await getRunMilestonesByProduct(product.productId);
+      const checkpointOverrides = product.improvementCheckpoints ?? {};
+      const firstRunAt = Object.prototype.hasOwnProperty.call(checkpointOverrides, "firstRunAt") ? checkpointOverrides.firstRunAt ?? null : milestones.firstRunAt;
+      const secondRunAt = Object.prototype.hasOwnProperty.call(checkpointOverrides, "secondRunAt") ? checkpointOverrides.secondRunAt ?? null : milestones.secondRunAt;
+      return {
+        productId: product.productId,
+        createdAt: product.createdAt,
+        updatedAt: product.updatedAt,
+        productName: product.profile.productName,
+        brandName: product.profile.brandName ?? null,
+        category: product.profile.category ?? null,
+        storeName: product.profile.storeName ?? null,
+        sourceUrl: product.profile.sourceUrl,
+        canonicalUrl: product.profile.canonicalUrl,
+        promptCount: product.promptBank?.prompts.length ?? 0,
+        runCount: milestones.runCount,
+        firstRunAt,
+        secondRunAt,
+        descriptionImproved: product.descriptionImproved,
+        descriptionImprovedAt: product.descriptionImprovedAt ?? null,
+        latestRunId: product.latestRunId ?? null,
+        lockedAuditedProvider: product.lockedAuditedProvider ?? null,
+        lockedAuditedModel: product.lockedAuditedModel ?? null,
+      };
+    }),
   );
 }
 
@@ -106,6 +116,17 @@ export async function getProduct(productId: string): Promise<SavedProduct | null
 
 export async function deleteProduct(productId: string): Promise<boolean> {
   return deleteProductRecord(productId);
+}
+
+export async function setProductDescriptionImproved(productId: string, descriptionImproved: boolean): Promise<SavedProduct> {
+  return updateProductDescriptionImprovement(productId, descriptionImproved);
+}
+
+export async function setProductImprovementCheckpoints(
+  productId: string,
+  checkpoints: { firstRunAt?: string | null; secondRunAt?: string | null },
+): Promise<SavedProduct> {
+  return updateProductImprovementCheckpoints(productId, checkpoints);
 }
 
 export async function generateProductPrompts(productId: string): Promise<SavedProduct> {

@@ -293,6 +293,35 @@ label,
   background: var(--accent-soft);
 }
 
+.page-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1.1rem;
+}
+
+.page-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  padding: 0.8rem 1.1rem;
+  border-radius: 999px;
+  border: 1px solid rgba(23, 19, 16, 0.12);
+  background: rgba(255, 255, 255, 0.66);
+   cursor: pointer;
+  transition: transform 160ms ease, background 160ms ease, border-color 160ms ease;
+}
+
+.page-link:hover {
+  transform: translateY(-1px);
+}
+
+.page-link.is-active {
+  border-color: rgba(200, 107, 44, 0.35);
+  background: linear-gradient(135deg, rgba(200, 107, 44, 0.18), rgba(255, 255, 255, 0.52));
+}
+
 .empty-state,
 .error-box {
   margin: 0;
@@ -588,6 +617,130 @@ label,
   gap: 1rem;
 }
 
+.improvements-card {
+  margin-top: 1rem;
+}
+
+.improvement-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.improvement-row {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.9fr) minmax(0, 1.3fr);
+  gap: 1rem;
+  align-items: start;
+  padding: 1rem 1.05rem;
+  border-radius: 22px;
+  border: 1px solid rgba(23, 19, 16, 0.08);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.38));
+}
+
+.improvement-row.is-improved {
+  border-color: rgba(113, 132, 106, 0.28);
+  background: linear-gradient(135deg, rgba(113, 132, 106, 0.16), rgba(255, 255, 255, 0.5));
+}
+
+.improvement-content {
+  min-width: 0;
+}
+
+.improvement-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.improvement-content strong {
+  display: block;
+}
+
+.improvement-content p {
+  margin: 0.35rem 0 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 0.2rem 0.65rem;
+  border-radius: 999px;
+  border: 1px solid rgba(23, 19, 16, 0.12);
+  background: rgba(255, 255, 255, 0.72);
+  font-size: 0.75rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.status-chip.is-on {
+  border-color: rgba(113, 132, 106, 0.32);
+  background: rgba(113, 132, 106, 0.18);
+  color: #4d6047;
+}
+
+.improvement-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+  cursor: pointer;
+}
+
+.improvement-toggle input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+}
+
+.improvement-toggle span {
+  color: var(--ink);
+}
+
+.checkpoint-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.checkpoint-card {
+  display: grid;
+  gap: 0.55rem;
+  min-width: 0;
+  padding: 0.95rem 1rem;
+  border-radius: 18px;
+  border: 1px solid rgba(23, 19, 16, 0.1);
+  background: rgba(255, 255, 255, 0.62);
+}
+
+.checkpoint-card.is-checked {
+  border-color: rgba(113, 132, 106, 0.28);
+  background: linear-gradient(135deg, rgba(113, 132, 106, 0.14), rgba(255, 255, 255, 0.58));
+}
+
+.checkpoint-card.is-disabled .improvement-toggle {
+  cursor: default;
+}
+
+.checkpoint-meta,
+.checkpoint-helper {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.checkpoint-meta {
+  font-size: 0.92rem;
+}
+
+.checkpoint-helper {
+  font-size: 0.86rem;
+}
+
 .summary-strip {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
@@ -707,6 +860,8 @@ label,
   .run-history-list,
   .summary-strip,
   .control-grid,
+  .checkpoint-grid,
+  .improvement-row,
   .prompt-row,
   .result-item summary {
     grid-template-columns: 1fr;
