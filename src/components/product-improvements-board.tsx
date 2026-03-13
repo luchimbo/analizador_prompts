@@ -9,6 +9,7 @@ export function ProductImprovementsBoard() {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [savingProductId, setSavingProductId] = useState<string | null>(null);
+  const [bulkAction, setBulkAction] = useState<"select-all" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -37,6 +38,10 @@ export function ProductImprovementsBoard() {
       { label: "Con segunda corrida", value: trackedProducts.filter((product) => Boolean(product.secondRunAt)).length },
     ],
     [trackedProducts],
+  );
+  const pendingVisibleProducts = useMemo(
+    () => visibleProducts.filter((product) => !product.descriptionImproved),
+    [visibleProducts],
   );
 
   async function requestJson<T>(input: string, init?: RequestInit): Promise<T> {
@@ -86,6 +91,28 @@ export function ProductImprovementsBoard() {
     }
   }
 
+  async function handleSelectAllVisible() {
+    if (!pendingVisibleProducts.length) {
+      return;
+    }
+
+    setBulkAction("select-all");
+    setError(null);
+    try {
+      for (const product of pendingVisibleProducts) {
+        await requestJson(`/api/products/${product.productId}`, {
+          method: "PATCH",
+          body: JSON.stringify({ descriptionImproved: true }),
+        });
+      }
+      await loadProducts();
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : "No se pudo marcar la seleccion completa");
+    } finally {
+      setBulkAction(null);
+    }
+  }
+
   return (
     <section className="run-section">
       <div className="summary-strip">
@@ -119,6 +146,12 @@ export function ProductImprovementsBoard() {
           />
         </div>
 
+        <div className="actions">
+          <button onClick={() => void handleSelectAllVisible()} disabled={loading || savingProductId !== null || bulkAction !== null || !pendingVisibleProducts.length}>
+            {bulkAction === "select-all" ? "Marcando visibles..." : `Seleccionar todo visible (${pendingVisibleProducts.length})`}
+          </button>
+        </div>
+
         {error ? <p className="error-box">{error}</p> : null}
 
         {loading ? (
@@ -127,7 +160,7 @@ export function ProductImprovementsBoard() {
           <div className="improvement-list">
             {visibleProducts.map((product) => {
               const meta = [product.brandName, product.storeName, product.category].filter(Boolean).join(" · ");
-              const saving = savingProductId === product.productId;
+              const saving = savingProductId === product.productId || bulkAction !== null;
               return (
                 <article key={product.productId} className={`improvement-row${product.descriptionImproved ? " is-improved" : ""}`}>
                   <div className="improvement-content">
@@ -158,6 +191,7 @@ export function ProductImprovementsBoard() {
                       checked={product.descriptionImproved}
                       timestamp={product.descriptionImprovedAt}
                       helper={saving ? "Guardando cambio..." : "Marca manual para identificar productos optimizados."}
+                      disabled={saving}
                       onChange={(nextValue) => void handleToggle(product, nextValue)}
                     />
                     <CheckpointCard
