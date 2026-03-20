@@ -200,7 +200,9 @@ export interface ProductListItem {
   canonicalUrl: string;
   promptCount: number;
   runCount: number;
+  firstRunId?: string | null;
   firstRunAt?: string | null;
+  secondRunId?: string | null;
   secondRunAt?: string | null;
   descriptionImproved: boolean;
   descriptionImprovedAt?: string | null;

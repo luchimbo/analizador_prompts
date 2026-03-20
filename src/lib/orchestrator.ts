@@ -11,6 +11,7 @@ import { deleteProductRecord, getProductRecord, listProductRecords, updateProduc
 import {
   appendRunResult,
   createRunRecord,
+  findRunIdByProductAndCreatedAt,
   finalizeRunRecord,
   findResumableRun,
   getRunMilestonesByProduct,
@@ -86,6 +87,12 @@ export async function listProducts(): Promise<ProductListItem[]> {
       const checkpointOverrides = product.improvementCheckpoints ?? {};
       const firstRunAt = Object.prototype.hasOwnProperty.call(checkpointOverrides, "firstRunAt") ? checkpointOverrides.firstRunAt ?? null : milestones.firstRunAt;
       const secondRunAt = Object.prototype.hasOwnProperty.call(checkpointOverrides, "secondRunAt") ? checkpointOverrides.secondRunAt ?? null : milestones.secondRunAt;
+      const firstRunId = Object.prototype.hasOwnProperty.call(checkpointOverrides, "firstRunAt")
+        ? (firstRunAt ? await findRunIdByProductAndCreatedAt(product.productId, firstRunAt) : null)
+        : milestones.firstRunId;
+      const secondRunId = Object.prototype.hasOwnProperty.call(checkpointOverrides, "secondRunAt")
+        ? (secondRunAt ? await findRunIdByProductAndCreatedAt(product.productId, secondRunAt) : null)
+        : milestones.secondRunId;
       return {
         productId: product.productId,
         createdAt: product.createdAt,
@@ -98,7 +105,9 @@ export async function listProducts(): Promise<ProductListItem[]> {
         canonicalUrl: product.profile.canonicalUrl,
         promptCount: product.promptBank?.prompts.length ?? 0,
         runCount: milestones.runCount,
+        firstRunId,
         firstRunAt,
+        secondRunId,
         secondRunAt,
         descriptionImproved: product.descriptionImproved,
         descriptionImprovedAt: product.descriptionImprovedAt ?? null,

@@ -367,20 +367,53 @@ export async function countRunsByProduct(productId: string): Promise<number> {
   return Number(result.rows[0]?.total ?? 0);
 }
 
-export async function getRunMilestonesByProduct(productId: string): Promise<{ runCount: number; firstRunAt: string | null; secondRunAt: string | null }> {
+export async function getRunMilestonesByProduct(productId: string): Promise<{
+  runCount: number;
+  firstRunId: string | null;
+  firstRunAt: string | null;
+  secondRunId: string | null;
+  secondRunAt: string | null;
+}> {
   await repairStaleRunningRuns();
   const db = await getDb();
   const countResult = await db.execute({ sql: `SELECT COUNT(*) AS total FROM runs WHERE product_id = ?`, args: [productId] });
-  const milestoneResult = await db.execute({
-    sql: `SELECT created_at FROM runs WHERE product_id = ? ORDER BY created_at ASC LIMIT 2`,
+  const firstRunResult = await db.execute({
+    sql: `SELECT run_id, created_at FROM runs WHERE product_id = ? ORDER BY created_at ASC LIMIT 1`,
     args: [productId],
   });
 
+  const firstRunRow = firstRunResult.rows[0];
+  const secondRunResult = firstRunRow
+    ? await db.execute({
+        sql: `
+          SELECT run_id, created_at
+          FROM runs
+          WHERE product_id = ? AND created_at > ? AND status = 'completed' AND completed_prompts >= 50
+          ORDER BY created_at ASC
+          LIMIT 1
+        `,
+        args: [productId, asString(firstRunRow.created_at)],
+      })
+    : { rows: [] as Array<Record<string, unknown>> };
+  const secondRunRow = secondRunResult.rows[0];
+
   return {
     runCount: Number(countResult.rows[0]?.total ?? 0),
-    firstRunAt: asNullableString(milestoneResult.rows[0]?.created_at),
-    secondRunAt: asNullableString(milestoneResult.rows[1]?.created_at),
+    firstRunId: asNullableString(firstRunRow?.run_id),
+    firstRunAt: asNullableString(firstRunRow?.created_at),
+    secondRunId: asNullableString(secondRunRow?.run_id),
+    secondRunAt: asNullableString(secondRunRow?.created_at),
   };
+}
+
+export async function findRunIdByProductAndCreatedAt(productId: string, createdAt: string): Promise<string | null> {
+  await repairStaleRunningRuns();
+  const db = await getDb();
+  const result = await db.execute({
+    sql: `SELECT run_id FROM runs WHERE product_id = ? AND created_at = ? LIMIT 1`,
+    args: [productId, createdAt],
+  });
+  return asNullableString(result.rows[0]?.run_id);
 }
 
 function mapRunRow(runRow: Record<string, unknown>, resultRows: Array<Record<string, unknown>>): AuditRunResponse {
