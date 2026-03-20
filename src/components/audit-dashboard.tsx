@@ -976,8 +976,48 @@ export function AuditDashboard() {
                 </article>
               </div>
 
-              {visibleResults.length ? (
-                <section className="run-section">
+              <section className="run-section">
+                <article className="card run-table-card">
+                  <div className="card-head">
+                    <span>Impacto entre primera y segunda corrida</span>
+                    <span>{automaticComparisonReady ? "comparacion automatica" : "sin segunda corrida valida"}</span>
+                  </div>
+                  <p className="stage-copy">
+                    Segunda corrida valida = corrida <strong>completed</strong> con <strong>50 prompts respondidos</strong>. Las corridas reanudadas tambien cuentan cuando terminan bajo esa regla.
+                  </p>
+                  {loadingAutoComparison ? (
+                    <p className="empty-state">Cargando comparacion automatica...</p>
+                  ) : automaticComparisonReady && automaticComparisonSummary ? (
+                    <>
+                      <p className="stage-copy">
+                        {`Primera corrida: ${selectedProductListItem?.firstRunAt ? formatDate(selectedProductListItem.firstRunAt) : "sin fecha"} · Segunda corrida: ${selectedProductListItem?.secondRunAt ? formatDate(selectedProductListItem.secondRunAt) : "sin fecha"}`}
+                      </p>
+                      <div className="summary-strip">
+                        {automaticComparisonSummary.map((item) => {
+                          const delta = item.after - item.before;
+                          const beforeLabel = item.percent ? `${Math.round(item.before * 100)}%` : item.before.toFixed(2);
+                          const afterLabel = item.percent ? `${Math.round(item.after * 100)}%` : item.after.toFixed(2);
+                          const deltaLabel = item.percent ? `${delta >= 0 ? "+" : ""}${Math.round(delta * 100)}%` : `${delta >= 0 ? "+" : ""}${delta.toFixed(2)}`;
+                          return (
+                            <div key={`auto-${item.label}`} className="summary-pill">
+                              <span>{item.label}</span>
+                              <strong>{`${beforeLabel} -> ${afterLabel}`}</strong>
+                              <small>{deltaLabel}</small>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <p className="stage-copy">Prompts con cambios relevantes entre primera y segunda corrida: {automaticComparisonPromptDiffs.length}</p>
+                    </>
+                  ) : (
+                    <p className="empty-state">
+                      Todavia no hay una segunda corrida valida para este producto. Tiene que quedar <strong>completed</strong> y con <strong>50 prompts respondidos</strong>.
+                    </p>
+                  )}
+                </article>
+
+                {visibleResults.length ? (
+                <>
                   {!showingLiveResults && activeRun ? (
                     <>
                       <div className="summary-strip">
@@ -1069,45 +1109,6 @@ export function AuditDashboard() {
 
                   <article className="card run-table-card">
                     <div className="card-head">
-                      <span>Impacto entre primera y segunda corrida</span>
-                      <span>{automaticComparisonReady ? "comparacion automatica" : "sin segunda corrida valida"}</span>
-                    </div>
-                    <p className="stage-copy">
-                      Segunda corrida valida = corrida <strong>completed</strong> con <strong>50 prompts respondidos</strong>. Las corridas reanudadas tambien cuentan cuando terminan bajo esa regla.
-                    </p>
-                    {loadingAutoComparison ? (
-                      <p className="empty-state">Cargando comparacion automatica...</p>
-                    ) : automaticComparisonReady && automaticComparisonSummary ? (
-                      <>
-                        <p className="stage-copy">
-                          {`Primera corrida: ${selectedProductListItem?.firstRunAt ? formatDate(selectedProductListItem.firstRunAt) : "sin fecha"} · Segunda corrida: ${selectedProductListItem?.secondRunAt ? formatDate(selectedProductListItem.secondRunAt) : "sin fecha"}`}
-                        </p>
-                        <div className="summary-strip">
-                          {automaticComparisonSummary.map((item) => {
-                            const delta = item.after - item.before;
-                            const beforeLabel = item.percent ? `${Math.round(item.before * 100)}%` : item.before.toFixed(2);
-                            const afterLabel = item.percent ? `${Math.round(item.after * 100)}%` : item.after.toFixed(2);
-                            const deltaLabel = item.percent ? `${delta >= 0 ? "+" : ""}${Math.round(delta * 100)}%` : `${delta >= 0 ? "+" : ""}${delta.toFixed(2)}`;
-                            return (
-                              <div key={`auto-${item.label}`} className="summary-pill">
-                                <span>{item.label}</span>
-                                <strong>{`${beforeLabel} -> ${afterLabel}`}</strong>
-                                <small>{deltaLabel}</small>
-                              </div>
-                            );
-                          })}
-                        </div>
-                        <p className="stage-copy">Prompts con cambios relevantes entre primera y segunda corrida: {automaticComparisonPromptDiffs.length}</p>
-                      </>
-                    ) : (
-                      <p className="empty-state">
-                        Todavia no hay una segunda corrida valida para este producto. Tiene que quedar <strong>completed</strong> y con <strong>50 prompts respondidos</strong>.
-                      </p>
-                    )}
-                  </article>
-
-                  <article className="card run-table-card">
-                    <div className="card-head">
                       <span>Comparar corridas</span>
                       <span>{leftCompareRunId && rightCompareRunId ? "2 seleccionadas" : "sin seleccion"}</span>
                     </div>
@@ -1186,8 +1187,9 @@ export function AuditDashboard() {
                       <p className="empty-state">Selecciona dos corridas y presiona comparar para ver diferencias.</p>
                     )}
                   </article>
-                </section>
-              ) : null}
+                </>
+                ) : null}
+              </section>
             </>
           ) : (
             <article className="card empty-workspace">
