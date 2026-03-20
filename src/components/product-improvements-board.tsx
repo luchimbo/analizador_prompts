@@ -2,7 +2,14 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-import type { ProductListItem } from "@/lib/types";
+import type { AuditRunResponse, ProductListItem } from "@/lib/types";
+
+interface ComparisonItem {
+  label: string;
+  before: number;
+  after: number;
+  percent: boolean;
+}
 
 export function ProductImprovementsBoard() {
   const [products, setProducts] = useState<ProductListItem[]>([]);
@@ -10,6 +17,9 @@ export function ProductImprovementsBoard() {
   const [loading, setLoading] = useState(true);
   const [savingProductId, setSavingProductId] = useState<string | null>(null);
   const [bulkAction, setBulkAction] = useState<"select-all" | null>(null);
+  const [expandedComparisonProductId, setExpandedComparisonProductId] = useState<string | null>(null);
+  const [loadingComparisonProductId, setLoadingComparisonProductId] = useState<string | null>(null);
+  const [comparisonByProduct, setComparisonByProduct] = useState<Record<string, { summary: ComparisonItem[]; promptDiffs: number }>>({});
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -113,6 +123,34 @@ export function ProductImprovementsBoard() {
     }
   }
 
+  async function handleToggleComparison(product: ProductListItem) {
+    const nextExpanded = expandedComparisonProductId === product.productId ? null : product.productId;
+    setExpandedComparisonProductId(nextExpanded);
+
+    if (!nextExpanded || comparisonByProduct[product.productId] || !product.firstRunId || !product.secondRunId) {
+      return;
+    }
+
+    setLoadingComparisonProductId(product.productId);
+    setError(null);
+    try {
+      const [beforeRun, afterRun] = await Promise.all([
+        requestJson<AuditRunResponse>(`/api/runs/${product.firstRunId}`, { method: "GET" }),
+        requestJson<AuditRunResponse>(`/api/runs/${product.secondRunId}`, { method: "GET" }),
+      ]);
+      const summary = buildComparisonSummary(beforeRun, afterRun);
+      const promptDiffs = countPromptDiffs(beforeRun, afterRun);
+      setComparisonByProduct((current) => ({
+        ...current,
+        [product.productId]: { summary, promptDiffs },
+      }));
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : "No se pudo cargar la comparacion de score");
+    } finally {
+      setLoadingComparisonProductId(null);
+    }
+  }
+
   return (
     <section className="run-section">
       <div className="summary-strip">
@@ -198,9 +236,61 @@ export function ProductImprovementsBoard() {
                       title="Segunda corrida"
                       checked={Boolean(product.secondRunAt)}
                       timestamp={product.secondRunAt}
-                      helper="Se completa automaticamente cuando el producto ya tiene una segunda corrida."
+                      helper="Se completa automaticamente cuando existe una corrida completed con 50 prompts respondidos."
                       disabled
                     />
+                  </div>
+
+                  <div className="comparison-panel">
+                    <div className="comparison-panel-head">
+                      <div>
+                        <strong>Impacto de score</strong>
+                        <p>
+                          {product.secondRunAt
+                            ? "Compara la primera corrida guardada contra la segunda corrida valida."
+                            : "Todavia no hay segunda corrida valida para comparar."}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => void handleToggleComparison(product)}
+                        disabled={!product.firstRunId || !product.secondRunId || loadingComparisonProductId === product.productId}
+                      >
+                        {expandedComparisonProductId === product.productId ? "Ocultar impacto" : "Ver impacto"}
+                      </button>
+                    </div>
+
+                    {expandedComparisonProductId === product.productId ? (
+                      loadingComparisonProductId === product.productId ? (
+                        <p className="empty-state">Cargando comparacion de score...</p>
+                      ) : comparisonByProduct[product.productId] ? (
+                        <>
+                          <p className="checkpoint-helper">
+                            {`Primera corrida: ${product.firstRunAt ? formatDateTime(product.firstRunAt) : "sin fecha"} · Segunda corrida: ${product.secondRunAt ? formatDateTime(product.secondRunAt) : "sin fecha"}`}
+                          </p>
+                          <div className="summary-strip comparison-strip">
+                            {comparisonByProduct[product.productId].summary.map((item) => {
+                              const delta = item.after - item.before;
+                              const beforeLabel = item.percent ? `${Math.round(item.before * 100)}%` : item.before.toFixed(2);
+                              const afterLabel = item.percent ? `${Math.round(item.after * 100)}%` : item.after.toFixed(2);
+                              const deltaLabel = item.percent ? `${delta >= 0 ? "+" : ""}${Math.round(delta * 100)}%` : `${delta >= 0 ? "+" : ""}${delta.toFixed(2)}`;
+                              return (
+                                <div key={`${product.productId}-${item.label}`} className="summary-pill comparison-pill compact-pill">
+                                  <span>{item.label}</span>
+                                  <strong>{`${beforeLabel} -> ${afterLabel}`}</strong>
+                                  <small className={comparisonDeltaClass(delta)}>{deltaLabel}</small>
+                                </div>
+                              );
+                            })}
+                          </div>
+                          <p className="checkpoint-helper">
+                            Prompts con cambios relevantes: {comparisonByProduct[product.productId].promptDiffs}
+                          </p>
+                        </>
+                      ) : (
+                        <p className="empty-state">No se pudo preparar la comparacion para este producto.</p>
+                      )
+                    ) : null}
                   </div>
                 </article>
               );
@@ -212,6 +302,57 @@ export function ProductImprovementsBoard() {
       </section>
     </section>
   );
+}
+
+function buildComparisonSummary(beforeRun: AuditRunResponse, afterRun: AuditRunResponse): ComparisonItem[] {
+  if (!beforeRun.summary || !afterRun.summary) {
+    return [];
+  }
+
+  const before = beforeRun.summary;
+  const after = afterRun.summary;
+  return [
+    { label: "Overall Score", before: before.overallScore, after: after.overallScore, percent: false },
+    { label: "Product Hit", before: before.productHitRate, after: after.productHitRate, percent: true },
+    { label: "Vendor Hit", before: before.vendorHitRate, after: after.vendorHitRate, percent: true },
+    { label: "Exact URL", before: before.exactUrlAccuracyRate, after: after.exactUrlAccuracyRate, percent: true },
+    { label: "Internal Bonus Base", before: before.averageInternalAlternatives, after: after.averageInternalAlternatives, percent: false },
+    { label: "External Penalty Base", before: before.averageExternalCompetitors, after: after.averageExternalCompetitors, percent: false },
+    { label: "Avg Rank", before: before.averageRankWhenPresent, after: after.averageRankWhenPresent, percent: false },
+  ];
+}
+
+function countPromptDiffs(beforeRun: AuditRunResponse, afterRun: AuditRunResponse): number {
+  const beforeByPrompt = new Map(beforeRun.results.map((result) => [result.promptId, result]));
+  const afterByPrompt = new Map(afterRun.results.map((result) => [result.promptId, result]));
+  let total = 0;
+
+  for (const [promptId, before] of beforeByPrompt.entries()) {
+    const after = afterByPrompt.get(promptId);
+    if (!after) {
+      continue;
+    }
+    if (
+      before.productHit !== after.productHit ||
+      before.rank !== after.rank ||
+      before.internalAlternatives !== after.internalAlternatives ||
+      before.externalCompetitors !== after.externalCompetitors
+    ) {
+      total += 1;
+    }
+  }
+
+  return total;
+}
+
+function comparisonDeltaClass(delta: number): string {
+  if (delta > 0) {
+    return "comparison-delta is-positive";
+  }
+  if (delta < 0) {
+    return "comparison-delta is-negative";
+  }
+  return "comparison-delta is-neutral";
 }
 
 function CheckpointCard({

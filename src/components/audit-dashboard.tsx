@@ -65,10 +65,7 @@ export function AuditDashboard() {
   const [rightCompareRunId, setRightCompareRunId] = useState<string>("");
   const [leftCompareRun, setLeftCompareRun] = useState<AuditRunResponse | null>(null);
   const [rightCompareRun, setRightCompareRun] = useState<AuditRunResponse | null>(null);
-  const [autoLeftCompareRun, setAutoLeftCompareRun] = useState<AuditRunResponse | null>(null);
-  const [autoRightCompareRun, setAutoRightCompareRun] = useState<AuditRunResponse | null>(null);
   const [loadingComparison, setLoadingComparison] = useState(false);
-  const [loadingAutoComparison, setLoadingAutoComparison] = useState(false);
   const [activeSector, setActiveSector] = useState<DashboardSector>("audit");
   const [defaultModels, setDefaultModels] = useState<Record<ProviderValue, string>>({
     openai: "",
@@ -93,10 +90,6 @@ export function AuditDashboard() {
     selectedProduct.promptBank.prompts.length !== STANDARD_PROMPT_COUNT ||
     selectedProduct.promptBank.language !== LOCKED_LANGUAGE ||
     selectedProduct.promptBank.market !== LOCKED_MARKET;
-  const selectedProductListItem = useMemo(
-    () => products.find((product) => product.productId === selectedProductId) ?? null,
-    [products, selectedProductId],
-  );
   const productsWithRuns = products.filter((product) => product.runCount > 0).length;
   const geomodiProducts = products.filter((product) => product.descriptionImproved).length;
   const secondRunProducts = products.filter((product) => Boolean(product.secondRunAt)).length;
@@ -217,52 +210,6 @@ export function AuditDashboard() {
 
     return `Comparacion entre muestras distintas: ${getPromptPlanLabel(leftCount)} vs ${getPromptPlanLabel(rightCount)}.`;
   }, [leftCompareRun, rightCompareRun]);
-
-  const automaticComparisonReady = Boolean(selectedProductListItem?.firstRunId && selectedProductListItem?.secondRunId);
-
-  const automaticComparisonSummary = useMemo(() => {
-    if (!autoLeftCompareRun?.summary || !autoRightCompareRun?.summary) {
-      return null;
-    }
-    const before = autoLeftCompareRun.summary;
-    const after = autoRightCompareRun.summary;
-    return [
-      { label: "Overall Score", before: before.overallScore, after: after.overallScore, percent: false },
-      { label: "Product Hit", before: before.productHitRate, after: after.productHitRate, percent: true },
-      { label: "Vendor Hit", before: before.vendorHitRate, after: after.vendorHitRate, percent: true },
-      { label: "Exact URL", before: before.exactUrlAccuracyRate, after: after.exactUrlAccuracyRate, percent: true },
-      { label: "Internal Bonus Base", before: before.averageInternalAlternatives, after: after.averageInternalAlternatives, percent: false },
-      { label: "External Penalty Base", before: before.averageExternalCompetitors, after: after.averageExternalCompetitors, percent: false },
-      { label: "Avg Rank", before: before.averageRankWhenPresent, after: after.averageRankWhenPresent, percent: false },
-    ];
-  }, [autoLeftCompareRun, autoRightCompareRun]);
-
-  const automaticComparisonPromptDiffs = useMemo(() => {
-    if (!autoLeftCompareRun || !autoRightCompareRun) {
-      return [] as Array<{ promptId: string; before: PromptAuditResult; after: PromptAuditResult }>;
-    }
-
-    const leftByPrompt = new Map(autoLeftCompareRun.results.map((result) => [result.promptId, result]));
-    const rightByPrompt = new Map(autoRightCompareRun.results.map((result) => [result.promptId, result]));
-    const diffs: Array<{ promptId: string; before: PromptAuditResult; after: PromptAuditResult }> = [];
-
-    for (const [promptId, before] of leftByPrompt.entries()) {
-      const after = rightByPrompt.get(promptId);
-      if (!after) {
-        continue;
-      }
-      if (
-        before.productHit !== after.productHit ||
-        before.rank !== after.rank ||
-        before.internalAlternatives !== after.internalAlternatives ||
-        before.externalCompetitors !== after.externalCompetitors
-      ) {
-        diffs.push({ promptId, before, after });
-      }
-    }
-
-    return diffs;
-  }, [autoLeftCompareRun, autoRightCompareRun]);
 
   async function requestJson<T>(input: string, init?: RequestInit): Promise<T> {
     const response = await fetch(input, {
@@ -635,36 +582,6 @@ export function AuditDashboard() {
     }
   }
 
-  async function loadAutomaticComparisonRuns(leftRunId: string, rightRunId: string) {
-    setLoadingAutoComparison(true);
-    try {
-      const [left, right] = await Promise.all([
-        requestJson<AuditRunResponse>(`/api/runs/${leftRunId}`, { method: "GET" }),
-        requestJson<AuditRunResponse>(`/api/runs/${rightRunId}`, { method: "GET" }),
-      ]);
-      setAutoLeftCompareRun(left);
-      setAutoRightCompareRun(right);
-    } catch (caughtError) {
-      setError(caughtError instanceof Error ? caughtError.message : "No se pudo cargar la comparacion automatica");
-    } finally {
-      setLoadingAutoComparison(false);
-    }
-  }
-
-  useEffect(() => {
-    if (!selectedProductListItem?.firstRunId || !selectedProductListItem?.secondRunId) {
-      setAutoLeftCompareRun(null);
-      setAutoRightCompareRun(null);
-      setLeftCompareRunId(selectedProductListItem?.firstRunId ?? "");
-      setRightCompareRunId(selectedProductListItem?.secondRunId ?? "");
-      return;
-    }
-
-    setLeftCompareRunId(selectedProductListItem.firstRunId);
-    setRightCompareRunId(selectedProductListItem.secondRunId);
-    void loadAutomaticComparisonRuns(selectedProductListItem.firstRunId, selectedProductListItem.secondRunId);
-  }, [selectedProductListItem?.firstRunId, selectedProductListItem?.secondRunId]);
-
   return (
     <div className="shell">
       <section className="hero hero-product-first">
@@ -977,45 +894,6 @@ export function AuditDashboard() {
               </div>
 
               <section className="run-section">
-                <article className="card run-table-card">
-                  <div className="card-head">
-                    <span>Impacto entre primera y segunda corrida</span>
-                    <span>{automaticComparisonReady ? "comparacion automatica" : "sin segunda corrida valida"}</span>
-                  </div>
-                  <p className="stage-copy">
-                    Segunda corrida valida = corrida <strong>completed</strong> con <strong>50 prompts respondidos</strong>. Las corridas reanudadas tambien cuentan cuando terminan bajo esa regla.
-                  </p>
-                  {loadingAutoComparison ? (
-                    <p className="empty-state">Cargando comparacion automatica...</p>
-                  ) : automaticComparisonReady && automaticComparisonSummary ? (
-                    <>
-                      <p className="stage-copy">
-                        {`Primera corrida: ${selectedProductListItem?.firstRunAt ? formatDate(selectedProductListItem.firstRunAt) : "sin fecha"} · Segunda corrida: ${selectedProductListItem?.secondRunAt ? formatDate(selectedProductListItem.secondRunAt) : "sin fecha"}`}
-                      </p>
-                      <div className="summary-strip">
-                        {automaticComparisonSummary.map((item) => {
-                          const delta = item.after - item.before;
-                          const beforeLabel = item.percent ? `${Math.round(item.before * 100)}%` : item.before.toFixed(2);
-                          const afterLabel = item.percent ? `${Math.round(item.after * 100)}%` : item.after.toFixed(2);
-                          const deltaLabel = item.percent ? `${delta >= 0 ? "+" : ""}${Math.round(delta * 100)}%` : `${delta >= 0 ? "+" : ""}${delta.toFixed(2)}`;
-                          return (
-                            <div key={`auto-${item.label}`} className="summary-pill comparison-pill">
-                              <span>{item.label}</span>
-                              <strong>{`${beforeLabel} -> ${afterLabel}`}</strong>
-                              <small className={comparisonDeltaClass(delta)}>{deltaLabel}</small>
-                            </div>
-                          );
-                        })}
-                      </div>
-                      <p className="stage-copy">Prompts con cambios relevantes entre primera y segunda corrida: {automaticComparisonPromptDiffs.length}</p>
-                    </>
-                  ) : (
-                    <p className="empty-state">
-                      Todavia no hay una segunda corrida valida para este producto. Tiene que quedar <strong>completed</strong> y con <strong>50 prompts respondidos</strong>.
-                    </p>
-                  )}
-                </article>
-
                 {visibleResults.length ? (
                 <>
                   {!showingLiveResults && activeRun ? (

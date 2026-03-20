@@ -701,6 +701,34 @@ label,
   color: var(--ink);
 }
 
+.comparison-panel {
+  display: grid;
+  gap: 0.8rem;
+  grid-column: 1 / -1;
+  margin-top: 0.25rem;
+  padding-top: 0.25rem;
+}
+
+.comparison-panel-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: center;
+}
+
+.comparison-panel-head p {
+  margin: 0.25rem 0 0;
+  color: var(--muted);
+}
+
+.comparison-strip {
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+}
+
+.compact-pill strong {
+  font-size: 1.2rem;
+}
+
 .checkpoint-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
