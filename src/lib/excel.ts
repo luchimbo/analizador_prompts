@@ -1,7 +1,7 @@
 import * as XLSX from "xlsx";
 
 import { getPromptPlanLabel } from "@/lib/audit-metrics";
-import type { AuditRunResponse } from "@/lib/types";
+import type { AuditRunResponse, ImprovementComparisonRow } from "@/lib/types";
 
 export function buildExcelBuffer(run: AuditRunResponse): Buffer {
   const workbook = XLSX.utils.book_new();
@@ -54,5 +54,26 @@ export function buildExcelBuffer(run: AuditRunResponse): Buffer {
   XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(detailRows), "Prompt Detail");
   XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(summaryRows), "Summary");
 
+  return XLSX.write(workbook, { type: "buffer", bookType: "xlsx" }) as Buffer;
+}
+
+export function buildImprovementComparisonExcelBuffer(rows: ImprovementComparisonRow[]): Buffer {
+  const workbook = XLSX.utils.book_new();
+
+  const summaryRows = rows.map((row) => ({
+    Product_ID: row.productId,
+    Product: row.productName,
+    Brand: row.brandName ?? "",
+    Store: row.storeName ?? "",
+    First_Run_ID: row.firstRunId ?? "",
+    First_Run_At: row.firstRunAt ?? "",
+    Score_Before: row.firstRunScore ?? "",
+    Second_Run_ID: row.secondRunId ?? "",
+    Second_Run_At: row.secondRunAt ?? "",
+    Score_After: row.secondRunScore ?? "",
+    Score_Difference: row.scoreDifference ?? "",
+  }));
+
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(summaryRows), "Improvement Impact");
   return XLSX.write(workbook, { type: "buffer", bookType: "xlsx" }) as Buffer;
 }

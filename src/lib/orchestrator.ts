@@ -11,6 +11,7 @@ import { deleteProductRecord, getProductRecord, listProductRecords, updateProduc
 import {
   appendRunResult,
   createRunRecord,
+  findQualifiedSecondRunByProduct,
   findRunIdByProductAndCreatedAt,
   finalizeRunRecord,
   findResumableRun,
@@ -30,6 +31,7 @@ import type {
   AuditRunResponse,
   AuditedProvider,
   CreateProductRequest,
+  ImprovementComparisonRow,
   ProductListItem,
   ProductProfile,
   ProductRunRequest,
@@ -86,13 +88,21 @@ export async function listProducts(): Promise<ProductListItem[]> {
       const milestones = await getRunMilestonesByProduct(product.productId);
       const checkpointOverrides = product.improvementCheckpoints ?? {};
       const firstRunAt = Object.prototype.hasOwnProperty.call(checkpointOverrides, "firstRunAt") ? checkpointOverrides.firstRunAt ?? null : milestones.firstRunAt;
-      const secondRunAt = Object.prototype.hasOwnProperty.call(checkpointOverrides, "secondRunAt") ? checkpointOverrides.secondRunAt ?? null : milestones.secondRunAt;
       const firstRunId = Object.prototype.hasOwnProperty.call(checkpointOverrides, "firstRunAt")
         ? (firstRunAt ? await findRunIdByProductAndCreatedAt(product.productId, firstRunAt) : null)
         : milestones.firstRunId;
-      const secondRunId = Object.prototype.hasOwnProperty.call(checkpointOverrides, "secondRunAt")
-        ? (secondRunAt ? await findRunIdByProductAndCreatedAt(product.productId, secondRunAt) : null)
-        : milestones.secondRunId;
+      const overriddenSecondRunAt = checkpointOverrides.secondRunAt;
+      const overriddenSecondRun = overriddenSecondRunAt
+        ? {
+            runId: await findRunIdByProductAndCreatedAt(product.productId, overriddenSecondRunAt),
+            createdAt: overriddenSecondRunAt,
+          }
+        : null;
+      const derivedSecondRun = firstRunAt
+        ? await findQualifiedSecondRunByProduct(product.productId, firstRunAt)
+        : { runId: milestones.secondRunId, createdAt: milestones.secondRunAt };
+      const secondRunId = overriddenSecondRun?.runId ?? derivedSecondRun.runId ?? null;
+      const secondRunAt = overriddenSecondRun?.createdAt ?? derivedSecondRun.createdAt ?? null;
       return {
         productId: product.productId,
         createdAt: product.createdAt,
@@ -115,6 +125,37 @@ export async function listProducts(): Promise<ProductListItem[]> {
         lockedAuditedProvider: product.lockedAuditedProvider ?? null,
         lockedAuditedModel: product.lockedAuditedModel ?? null,
       };
+    }),
+  );
+}
+
+export async function listImprovementComparisonRows(): Promise<ImprovementComparisonRow[]> {
+  const products = await listProducts();
+  const trackedProducts = products.filter((product) => product.firstRunId);
+
+  return Promise.all(
+    trackedProducts.map(async (product) => {
+      const beforeRun = product.firstRunId ? await getRun(product.firstRunId) : null;
+      const afterRun = product.secondRunId ? await getRun(product.secondRunId) : null;
+      const firstRunScore = beforeRun?.summary?.overallScore ?? null;
+      const secondRunScore = afterRun?.summary?.overallScore ?? null;
+
+      return {
+        productId: product.productId,
+        productName: product.productName,
+        brandName: product.brandName ?? null,
+        storeName: product.storeName ?? null,
+        firstRunId: product.firstRunId ?? null,
+        firstRunAt: product.firstRunAt ?? null,
+        firstRunScore,
+        secondRunId: product.secondRunId ?? null,
+        secondRunAt: product.secondRunAt ?? null,
+        secondRunScore,
+        scoreDifference:
+          typeof firstRunScore === "number" && typeof secondRunScore === "number"
+            ? Math.round((secondRunScore - firstRunScore) * 100) / 100
+            : null,
+      } satisfies ImprovementComparisonRow;
     }),
   );
 }

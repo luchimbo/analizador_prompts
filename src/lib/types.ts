@@ -239,6 +239,20 @@ export interface UpdateProductImprovementRequest {
   secondRunAt?: string | null;
 }
 
+export interface ImprovementComparisonRow {
+  productId: string;
+  productName: string;
+  brandName?: string | null;
+  storeName?: string | null;
+  firstRunId?: string | null;
+  firstRunAt?: string | null;
+  firstRunScore?: number | null;
+  secondRunId?: string | null;
+  secondRunAt?: string | null;
+  secondRunScore?: number | null;
+  scoreDifference?: number | null;
+}
+
 export interface RunProgressEvent {
   type: "started" | "progress" | "complete" | "error";
   current?: number;

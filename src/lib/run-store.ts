@@ -383,19 +383,9 @@ export async function getRunMilestonesByProduct(productId: string): Promise<{
   });
 
   const firstRunRow = firstRunResult.rows[0];
-  const secondRunResult = firstRunRow
-    ? await db.execute({
-        sql: `
-          SELECT run_id, created_at
-          FROM runs
-          WHERE product_id = ? AND created_at > ? AND status = 'completed' AND completed_prompts >= 50
-          ORDER BY created_at ASC
-          LIMIT 1
-        `,
-        args: [productId, asString(firstRunRow.created_at)],
-      })
-    : { rows: [] as Array<Record<string, unknown>> };
-  const secondRunRow = secondRunResult.rows[0];
+  const secondRunRow = firstRunRow
+    ? await findQualifiedSecondRunRow(db, productId, asString(firstRunRow.created_at))
+    : null;
 
   return {
     runCount: Number(countResult.rows[0]?.total ?? 0),
@@ -403,6 +393,16 @@ export async function getRunMilestonesByProduct(productId: string): Promise<{
     firstRunAt: asNullableString(firstRunRow?.created_at),
     secondRunId: asNullableString(secondRunRow?.run_id),
     secondRunAt: asNullableString(secondRunRow?.created_at),
+  };
+}
+
+export async function findQualifiedSecondRunByProduct(productId: string, afterCreatedAt: string): Promise<{ runId: string | null; createdAt: string | null }> {
+  await repairStaleRunningRuns();
+  const db = await getDb();
+  const row = await findQualifiedSecondRunRow(db, productId, afterCreatedAt);
+  return {
+    runId: asNullableString(row?.run_id),
+    createdAt: asNullableString(row?.created_at),
   };
 }
 
@@ -414,6 +414,24 @@ export async function findRunIdByProductAndCreatedAt(productId: string, createdA
     args: [productId, createdAt],
   });
   return asNullableString(result.rows[0]?.run_id);
+}
+
+async function findQualifiedSecondRunRow(
+  db: Awaited<ReturnType<typeof getDb>>,
+  productId: string,
+  afterCreatedAt: string,
+): Promise<Record<string, unknown> | null> {
+  const result = await db.execute({
+    sql: `
+      SELECT run_id, created_at
+      FROM runs
+      WHERE product_id = ? AND created_at > ? AND status = 'completed' AND completed_prompts >= 50
+      ORDER BY created_at ASC
+      LIMIT 1
+    `,
+    args: [productId, afterCreatedAt],
+  });
+  return (result.rows[0] as Record<string, unknown> | undefined) ?? null;
 }
 
 function mapRunRow(runRow: Record<string, unknown>, resultRows: Array<Record<string, unknown>>): AuditRunResponse {
