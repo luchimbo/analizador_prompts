@@ -17,7 +17,6 @@ export function ProductImprovementsBoard() {
   const [loading, setLoading] = useState(true);
   const [savingProductId, setSavingProductId] = useState<string | null>(null);
   const [bulkAction, setBulkAction] = useState<"select-all" | null>(null);
-  const [expandedComparisonProductId, setExpandedComparisonProductId] = useState<string | null>(null);
   const [loadingComparisonProductId, setLoadingComparisonProductId] = useState<string | null>(null);
   const [comparisonByProduct, setComparisonByProduct] = useState<Record<string, { summary: ComparisonItem[]; promptDiffs: number }>>({});
   const [error, setError] = useState<string | null>(null);
@@ -123,11 +122,8 @@ export function ProductImprovementsBoard() {
     }
   }
 
-  async function handleToggleComparison(product: ProductListItem) {
-    const nextExpanded = expandedComparisonProductId === product.productId ? null : product.productId;
-    setExpandedComparisonProductId(nextExpanded);
-
-    if (!nextExpanded || comparisonByProduct[product.productId] || !product.firstRunId || !product.secondRunId) {
+  async function ensureComparisonLoaded(product: ProductListItem) {
+    if (comparisonByProduct[product.productId] || !product.firstRunId || !product.secondRunId) {
       return;
     }
 
@@ -150,6 +146,18 @@ export function ProductImprovementsBoard() {
       setLoadingComparisonProductId(null);
     }
   }
+
+  useEffect(() => {
+    const candidates = visibleProducts.filter(
+      (product) => product.firstRunId && product.secondRunId && !comparisonByProduct[product.productId],
+    );
+
+    if (!candidates.length || loadingComparisonProductId) {
+      return;
+    }
+
+    void ensureComparisonLoaded(candidates[0]);
+  }, [visibleProducts, comparisonByProduct, loadingComparisonProductId]);
 
   return (
     <section className="run-section">
@@ -251,45 +259,36 @@ export function ProductImprovementsBoard() {
                             : "Todavia no hay segunda corrida valida para comparar."}
                         </p>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => void handleToggleComparison(product)}
-                        disabled={!product.firstRunId || !product.secondRunId || loadingComparisonProductId === product.productId}
-                      >
-                        {expandedComparisonProductId === product.productId ? "Ocultar impacto" : "Ver impacto"}
-                      </button>
                     </div>
 
-                    {expandedComparisonProductId === product.productId ? (
-                      loadingComparisonProductId === product.productId ? (
-                        <p className="empty-state">Cargando comparacion de score...</p>
-                      ) : comparisonByProduct[product.productId] ? (
-                        <>
-                          <p className="checkpoint-helper">
-                            {`Primera corrida: ${product.firstRunAt ? formatDateTime(product.firstRunAt) : "sin fecha"} · Segunda corrida: ${product.secondRunAt ? formatDateTime(product.secondRunAt) : "sin fecha"}`}
-                          </p>
-                          <div className="summary-strip comparison-strip">
-                            {comparisonByProduct[product.productId].summary.map((item) => {
-                              const delta = item.after - item.before;
-                              const beforeLabel = item.percent ? `${Math.round(item.before * 100)}%` : item.before.toFixed(2);
-                              const afterLabel = item.percent ? `${Math.round(item.after * 100)}%` : item.after.toFixed(2);
-                              const deltaLabel = item.percent ? `${delta >= 0 ? "+" : ""}${Math.round(delta * 100)}%` : `${delta >= 0 ? "+" : ""}${delta.toFixed(2)}`;
-                              return (
-                                <div key={`${product.productId}-${item.label}`} className="summary-pill comparison-pill compact-pill">
-                                  <span>{item.label}</span>
-                                  <strong>{`${beforeLabel} -> ${afterLabel}`}</strong>
-                                  <small className={comparisonDeltaClass(delta)}>{deltaLabel}</small>
-                                </div>
-                              );
-                            })}
-                          </div>
-                          <p className="checkpoint-helper">
-                            Prompts con cambios relevantes: {comparisonByProduct[product.productId].promptDiffs}
-                          </p>
-                        </>
-                      ) : (
-                        <p className="empty-state">No se pudo preparar la comparacion para este producto.</p>
-                      )
+                    {loadingComparisonProductId === product.productId ? (
+                      <p className="empty-state">Cargando comparacion de score...</p>
+                    ) : comparisonByProduct[product.productId] ? (
+                      <>
+                        <p className="checkpoint-helper">
+                          {`Primera corrida: ${product.firstRunAt ? formatDateTime(product.firstRunAt) : "sin fecha"} · Segunda corrida: ${product.secondRunAt ? formatDateTime(product.secondRunAt) : "sin fecha"}`}
+                        </p>
+                        <div className="summary-strip comparison-strip">
+                          {comparisonByProduct[product.productId].summary.map((item) => {
+                            const delta = item.after - item.before;
+                            const beforeLabel = item.percent ? `${Math.round(item.before * 100)}%` : item.before.toFixed(2);
+                            const afterLabel = item.percent ? `${Math.round(item.after * 100)}%` : item.after.toFixed(2);
+                            const deltaLabel = item.percent ? `${delta >= 0 ? "+" : ""}${Math.round(delta * 100)}%` : `${delta >= 0 ? "+" : ""}${delta.toFixed(2)}`;
+                            return (
+                              <div key={`${product.productId}-${item.label}`} className="summary-pill comparison-pill compact-pill">
+                                <span>{item.label}</span>
+                                <strong>{`${beforeLabel} -> ${afterLabel}`}</strong>
+                                <small className={comparisonDeltaClass(delta)}>{deltaLabel}</small>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <p className="checkpoint-helper">
+                          Prompts con cambios relevantes: {comparisonByProduct[product.productId].promptDiffs}
+                        </p>
+                      </>
+                    ) : product.firstRunId && product.secondRunId ? (
+                      <p className="empty-state">Preparando comparacion de score...</p>
                     ) : null}
                   </div>
                 </article>

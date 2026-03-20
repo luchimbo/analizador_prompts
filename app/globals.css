@@ -711,7 +711,7 @@ label,
 
 .comparison-panel-head {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 1rem;
   align-items: center;
 }
