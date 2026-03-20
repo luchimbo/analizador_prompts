@@ -758,6 +758,24 @@ label,
   font-size: 2rem;
 }
 
+.comparison-pill small {
+  display: inline-block;
+  margin-top: 0.45rem;
+  font-weight: 700;
+}
+
+.comparison-delta.is-positive {
+  color: #2f7a45;
+}
+
+.comparison-delta.is-negative {
+  color: #b3422b;
+}
+
+.comparison-delta.is-neutral {
+  color: var(--muted);
+}
+
 .result-list {
   max-height: 980px;
   overflow: auto;

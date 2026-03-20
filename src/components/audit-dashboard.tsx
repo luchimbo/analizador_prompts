@@ -999,10 +999,10 @@ export function AuditDashboard() {
                           const afterLabel = item.percent ? `${Math.round(item.after * 100)}%` : item.after.toFixed(2);
                           const deltaLabel = item.percent ? `${delta >= 0 ? "+" : ""}${Math.round(delta * 100)}%` : `${delta >= 0 ? "+" : ""}${delta.toFixed(2)}`;
                           return (
-                            <div key={`auto-${item.label}`} className="summary-pill">
+                            <div key={`auto-${item.label}`} className="summary-pill comparison-pill">
                               <span>{item.label}</span>
                               <strong>{`${beforeLabel} -> ${afterLabel}`}</strong>
-                              <small>{deltaLabel}</small>
+                              <small className={comparisonDeltaClass(delta)}>{deltaLabel}</small>
                             </div>
                           );
                         })}
@@ -1147,10 +1147,10 @@ export function AuditDashboard() {
                             const afterLabel = item.percent ? `${Math.round(item.after * 100)}%` : item.after.toFixed(2);
                             const deltaLabel = item.percent ? `${delta >= 0 ? "+" : ""}${Math.round(delta * 100)}%` : `${delta >= 0 ? "+" : ""}${delta.toFixed(2)}`;
                             return (
-                              <div key={item.label} className="summary-pill">
+                              <div key={item.label} className="summary-pill comparison-pill">
                                 <span>{item.label}</span>
                                 <strong>{`${beforeLabel} -> ${afterLabel}`}</strong>
-                                <small>{deltaLabel}</small>
+                                <small className={comparisonDeltaClass(delta)}>{deltaLabel}</small>
                               </div>
                             );
                           })}
@@ -1282,6 +1282,16 @@ function formatDate(value: string): string {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(value));
+}
+
+function comparisonDeltaClass(delta: number): string {
+  if (delta > 0) {
+    return "comparison-delta is-positive";
+  }
+  if (delta < 0) {
+    return "comparison-delta is-negative";
+  }
+  return "comparison-delta is-neutral";
 }
 
 function normalizeProvider(provider: string | null | undefined): string {
