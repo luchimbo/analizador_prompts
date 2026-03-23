@@ -293,6 +293,14 @@ label,
   background: var(--accent-soft);
 }
 
+.prominent-download {
+  min-height: 48px;
+  padding: 0.85rem 1.1rem;
+  border-radius: 999px;
+  border: 1px solid rgba(23, 19, 16, 0.12);
+  background: linear-gradient(135deg, rgba(200, 107, 44, 0.18), rgba(255, 255, 255, 0.58));
+}
+
 .page-nav {
   display: flex;
   flex-wrap: wrap;

@@ -196,14 +196,14 @@ export function ProductImprovementsBoard() {
           <button onClick={() => void handleSelectAllVisible()} disabled={loading || savingProductId !== null || bulkAction !== null || !pendingVisibleProducts.length}>
             {bulkAction === "select-all" ? "Marcando visibles..." : `Seleccionar todo visible (${pendingVisibleProducts.length})`}
           </button>
-          <a className="download" href="/api/improvements/excel">
-            Descargar Excel antes/despues
+          <a className="download prominent-download" href="/api/improvements/excel">
+            Descargar Excel completo antes/despues
           </a>
         </div>
 
         <p className="stage-copy">
           El Excel descarga un resumen unificado con todos los productos visibles en el sector de mejoras, incluyendo
-          producto, puntaje total antes, puntaje total despues y diferencia.
+          producto, puntaje total antes, puntaje total despues, diferencia y el resto de categorias comparadas.
         </p>
 
         {error ? <p className="error-box">{error}</p> : null}

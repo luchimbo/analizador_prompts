@@ -251,6 +251,24 @@ export interface ImprovementComparisonRow {
   secondRunAt?: string | null;
   secondRunScore?: number | null;
   scoreDifference?: number | null;
+  productHitBefore?: number | null;
+  productHitAfter?: number | null;
+  productHitDifference?: number | null;
+  vendorHitBefore?: number | null;
+  vendorHitAfter?: number | null;
+  vendorHitDifference?: number | null;
+  exactUrlBefore?: number | null;
+  exactUrlAfter?: number | null;
+  exactUrlDifference?: number | null;
+  avgRankBefore?: number | null;
+  avgRankAfter?: number | null;
+  avgRankDifference?: number | null;
+  internalBaseBefore?: number | null;
+  internalBaseAfter?: number | null;
+  internalBaseDifference?: number | null;
+  externalBaseBefore?: number | null;
+  externalBaseAfter?: number | null;
+  externalBaseDifference?: number | null;
 }
 
 export interface RunProgressEvent {

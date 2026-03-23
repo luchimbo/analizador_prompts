@@ -155,6 +155,42 @@ export async function listImprovementComparisonRows(): Promise<ImprovementCompar
           typeof firstRunScore === "number" && typeof secondRunScore === "number"
             ? Math.round((secondRunScore - firstRunScore) * 100) / 100
             : null,
+        productHitBefore: beforeRun?.summary?.productHitRate ?? null,
+        productHitAfter: afterRun?.summary?.productHitRate ?? null,
+        productHitDifference:
+          typeof beforeRun?.summary?.productHitRate === "number" && typeof afterRun?.summary?.productHitRate === "number"
+            ? Math.round((afterRun.summary.productHitRate - beforeRun.summary.productHitRate) * 10000) / 10000
+            : null,
+        vendorHitBefore: beforeRun?.summary?.vendorHitRate ?? null,
+        vendorHitAfter: afterRun?.summary?.vendorHitRate ?? null,
+        vendorHitDifference:
+          typeof beforeRun?.summary?.vendorHitRate === "number" && typeof afterRun?.summary?.vendorHitRate === "number"
+            ? Math.round((afterRun.summary.vendorHitRate - beforeRun.summary.vendorHitRate) * 10000) / 10000
+            : null,
+        exactUrlBefore: beforeRun?.summary?.exactUrlAccuracyRate ?? null,
+        exactUrlAfter: afterRun?.summary?.exactUrlAccuracyRate ?? null,
+        exactUrlDifference:
+          typeof beforeRun?.summary?.exactUrlAccuracyRate === "number" && typeof afterRun?.summary?.exactUrlAccuracyRate === "number"
+            ? Math.round((afterRun.summary.exactUrlAccuracyRate - beforeRun.summary.exactUrlAccuracyRate) * 10000) / 10000
+            : null,
+        avgRankBefore: beforeRun?.summary?.averageRankWhenPresent ?? null,
+        avgRankAfter: afterRun?.summary?.averageRankWhenPresent ?? null,
+        avgRankDifference:
+          typeof beforeRun?.summary?.averageRankWhenPresent === "number" && typeof afterRun?.summary?.averageRankWhenPresent === "number"
+            ? Math.round((afterRun.summary.averageRankWhenPresent - beforeRun.summary.averageRankWhenPresent) * 100) / 100
+            : null,
+        internalBaseBefore: beforeRun?.summary?.averageInternalAlternatives ?? null,
+        internalBaseAfter: afterRun?.summary?.averageInternalAlternatives ?? null,
+        internalBaseDifference:
+          typeof beforeRun?.summary?.averageInternalAlternatives === "number" && typeof afterRun?.summary?.averageInternalAlternatives === "number"
+            ? Math.round((afterRun.summary.averageInternalAlternatives - beforeRun.summary.averageInternalAlternatives) * 100) / 100
+            : null,
+        externalBaseBefore: beforeRun?.summary?.averageExternalCompetitors ?? null,
+        externalBaseAfter: afterRun?.summary?.averageExternalCompetitors ?? null,
+        externalBaseDifference:
+          typeof beforeRun?.summary?.averageExternalCompetitors === "number" && typeof afterRun?.summary?.averageExternalCompetitors === "number"
+            ? Math.round((afterRun.summary.averageExternalCompetitors - beforeRun.summary.averageExternalCompetitors) * 100) / 100
+            : null,
       } satisfies ImprovementComparisonRow;
     }),
   );
