@@ -202,8 +202,8 @@ export function ProductImprovementsBoard() {
         </div>
 
         <p className="stage-copy">
-          El Excel descarga un resumen unificado con todos los productos visibles en el sector de mejoras, incluyendo
-          producto, puntaje total antes, puntaje total despues, diferencia y el resto de categorias comparadas.
+          El Excel descarga solo el producto y los puntajes por categoria: total, product, vendor, URL, rank, bonus y penalty,
+          cada uno con antes, despues y diferencia.
         </p>
 
         {error ? <p className="error-box">{error}</p> : null}

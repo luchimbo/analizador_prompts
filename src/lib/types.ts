@@ -242,33 +242,27 @@ export interface UpdateProductImprovementRequest {
 export interface ImprovementComparisonRow {
   productId: string;
   productName: string;
-  brandName?: string | null;
-  storeName?: string | null;
-  firstRunId?: string | null;
-  firstRunAt?: string | null;
   firstRunScore?: number | null;
-  secondRunId?: string | null;
-  secondRunAt?: string | null;
   secondRunScore?: number | null;
   scoreDifference?: number | null;
-  productHitBefore?: number | null;
-  productHitAfter?: number | null;
-  productHitDifference?: number | null;
-  vendorHitBefore?: number | null;
-  vendorHitAfter?: number | null;
-  vendorHitDifference?: number | null;
-  exactUrlBefore?: number | null;
-  exactUrlAfter?: number | null;
-  exactUrlDifference?: number | null;
-  avgRankBefore?: number | null;
-  avgRankAfter?: number | null;
-  avgRankDifference?: number | null;
-  internalBaseBefore?: number | null;
-  internalBaseAfter?: number | null;
-  internalBaseDifference?: number | null;
-  externalBaseBefore?: number | null;
-  externalBaseAfter?: number | null;
-  externalBaseDifference?: number | null;
+  productPointsBefore?: number | null;
+  productPointsAfter?: number | null;
+  productPointsDifference?: number | null;
+  vendorPointsBefore?: number | null;
+  vendorPointsAfter?: number | null;
+  vendorPointsDifference?: number | null;
+  urlPointsBefore?: number | null;
+  urlPointsAfter?: number | null;
+  urlPointsDifference?: number | null;
+  rankPointsBefore?: number | null;
+  rankPointsAfter?: number | null;
+  rankPointsDifference?: number | null;
+  internalBonusBefore?: number | null;
+  internalBonusAfter?: number | null;
+  internalBonusDifference?: number | null;
+  externalPenaltyBefore?: number | null;
+  externalPenaltyAfter?: number | null;
+  externalPenaltyDifference?: number | null;
 }
 
 export interface RunProgressEvent {

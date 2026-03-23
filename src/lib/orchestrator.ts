@@ -143,53 +143,47 @@ export async function listImprovementComparisonRows(): Promise<ImprovementCompar
       return {
         productId: product.productId,
         productName: product.productName,
-        brandName: product.brandName ?? null,
-        storeName: product.storeName ?? null,
-        firstRunId: product.firstRunId ?? null,
-        firstRunAt: product.firstRunAt ?? null,
         firstRunScore,
-        secondRunId: product.secondRunId ?? null,
-        secondRunAt: product.secondRunAt ?? null,
         secondRunScore,
         scoreDifference:
           typeof firstRunScore === "number" && typeof secondRunScore === "number"
             ? Math.round((secondRunScore - firstRunScore) * 100) / 100
             : null,
-        productHitBefore: beforeRun?.summary?.productHitRate ?? null,
-        productHitAfter: afterRun?.summary?.productHitRate ?? null,
-        productHitDifference:
-          typeof beforeRun?.summary?.productHitRate === "number" && typeof afterRun?.summary?.productHitRate === "number"
-            ? Math.round((afterRun.summary.productHitRate - beforeRun.summary.productHitRate) * 10000) / 10000
+        productPointsBefore: beforeRun?.summary?.scoreBreakdown.productHitPoints ?? null,
+        productPointsAfter: afterRun?.summary?.scoreBreakdown.productHitPoints ?? null,
+        productPointsDifference:
+          typeof beforeRun?.summary?.scoreBreakdown.productHitPoints === "number" && typeof afterRun?.summary?.scoreBreakdown.productHitPoints === "number"
+            ? Math.round((afterRun.summary.scoreBreakdown.productHitPoints - beforeRun.summary.scoreBreakdown.productHitPoints) * 100) / 100
             : null,
-        vendorHitBefore: beforeRun?.summary?.vendorHitRate ?? null,
-        vendorHitAfter: afterRun?.summary?.vendorHitRate ?? null,
-        vendorHitDifference:
-          typeof beforeRun?.summary?.vendorHitRate === "number" && typeof afterRun?.summary?.vendorHitRate === "number"
-            ? Math.round((afterRun.summary.vendorHitRate - beforeRun.summary.vendorHitRate) * 10000) / 10000
+        vendorPointsBefore: beforeRun?.summary?.scoreBreakdown.vendorPoints ?? null,
+        vendorPointsAfter: afterRun?.summary?.scoreBreakdown.vendorPoints ?? null,
+        vendorPointsDifference:
+          typeof beforeRun?.summary?.scoreBreakdown.vendorPoints === "number" && typeof afterRun?.summary?.scoreBreakdown.vendorPoints === "number"
+            ? Math.round((afterRun.summary.scoreBreakdown.vendorPoints - beforeRun.summary.scoreBreakdown.vendorPoints) * 100) / 100
             : null,
-        exactUrlBefore: beforeRun?.summary?.exactUrlAccuracyRate ?? null,
-        exactUrlAfter: afterRun?.summary?.exactUrlAccuracyRate ?? null,
-        exactUrlDifference:
-          typeof beforeRun?.summary?.exactUrlAccuracyRate === "number" && typeof afterRun?.summary?.exactUrlAccuracyRate === "number"
-            ? Math.round((afterRun.summary.exactUrlAccuracyRate - beforeRun.summary.exactUrlAccuracyRate) * 10000) / 10000
+        urlPointsBefore: beforeRun?.summary?.scoreBreakdown.exactUrlPoints ?? null,
+        urlPointsAfter: afterRun?.summary?.scoreBreakdown.exactUrlPoints ?? null,
+        urlPointsDifference:
+          typeof beforeRun?.summary?.scoreBreakdown.exactUrlPoints === "number" && typeof afterRun?.summary?.scoreBreakdown.exactUrlPoints === "number"
+            ? Math.round((afterRun.summary.scoreBreakdown.exactUrlPoints - beforeRun.summary.scoreBreakdown.exactUrlPoints) * 100) / 100
             : null,
-        avgRankBefore: beforeRun?.summary?.averageRankWhenPresent ?? null,
-        avgRankAfter: afterRun?.summary?.averageRankWhenPresent ?? null,
-        avgRankDifference:
-          typeof beforeRun?.summary?.averageRankWhenPresent === "number" && typeof afterRun?.summary?.averageRankWhenPresent === "number"
-            ? Math.round((afterRun.summary.averageRankWhenPresent - beforeRun.summary.averageRankWhenPresent) * 100) / 100
+        rankPointsBefore: beforeRun?.summary?.scoreBreakdown.rankPoints ?? null,
+        rankPointsAfter: afterRun?.summary?.scoreBreakdown.rankPoints ?? null,
+        rankPointsDifference:
+          typeof beforeRun?.summary?.scoreBreakdown.rankPoints === "number" && typeof afterRun?.summary?.scoreBreakdown.rankPoints === "number"
+            ? Math.round((afterRun.summary.scoreBreakdown.rankPoints - beforeRun.summary.scoreBreakdown.rankPoints) * 100) / 100
             : null,
-        internalBaseBefore: beforeRun?.summary?.averageInternalAlternatives ?? null,
-        internalBaseAfter: afterRun?.summary?.averageInternalAlternatives ?? null,
-        internalBaseDifference:
-          typeof beforeRun?.summary?.averageInternalAlternatives === "number" && typeof afterRun?.summary?.averageInternalAlternatives === "number"
-            ? Math.round((afterRun.summary.averageInternalAlternatives - beforeRun.summary.averageInternalAlternatives) * 100) / 100
+        internalBonusBefore: beforeRun?.summary?.scoreBreakdown.internalBonusPoints ?? null,
+        internalBonusAfter: afterRun?.summary?.scoreBreakdown.internalBonusPoints ?? null,
+        internalBonusDifference:
+          typeof beforeRun?.summary?.scoreBreakdown.internalBonusPoints === "number" && typeof afterRun?.summary?.scoreBreakdown.internalBonusPoints === "number"
+            ? Math.round((afterRun.summary.scoreBreakdown.internalBonusPoints - beforeRun.summary.scoreBreakdown.internalBonusPoints) * 100) / 100
             : null,
-        externalBaseBefore: beforeRun?.summary?.averageExternalCompetitors ?? null,
-        externalBaseAfter: afterRun?.summary?.averageExternalCompetitors ?? null,
-        externalBaseDifference:
-          typeof beforeRun?.summary?.averageExternalCompetitors === "number" && typeof afterRun?.summary?.averageExternalCompetitors === "number"
-            ? Math.round((afterRun.summary.averageExternalCompetitors - beforeRun.summary.averageExternalCompetitors) * 100) / 100
+        externalPenaltyBefore: beforeRun?.summary?.scoreBreakdown.externalPenaltyPoints ?? null,
+        externalPenaltyAfter: afterRun?.summary?.scoreBreakdown.externalPenaltyPoints ?? null,
+        externalPenaltyDifference:
+          typeof beforeRun?.summary?.scoreBreakdown.externalPenaltyPoints === "number" && typeof afterRun?.summary?.scoreBreakdown.externalPenaltyPoints === "number"
+            ? Math.round((afterRun.summary.scoreBreakdown.externalPenaltyPoints - beforeRun.summary.scoreBreakdown.externalPenaltyPoints) * 100) / 100
             : null,
       } satisfies ImprovementComparisonRow;
     }),
